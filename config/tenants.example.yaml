@@ -1,0 +1,26 @@
+# Example tenant/source registry for local development.
+#
+# Copy this file to an ignored local file such as config/tenants.local.yaml and
+# point KABUTO_TENANTS_CONFIG at it when you want to use different GitHub owners,
+# repositories, or environment-variable names. Do not put token values here.
+
+tenants:
+  - tenant_id: personal
+    display_name: Personal GitHub Tenant
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners:
+          - crlough
+        repositories: []
+  - tenant_id: sandbox
+    display_name: Sandbox Reference Tenant
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners:
+          - octocat
+        repositories:
+          - octocat/Hello-World

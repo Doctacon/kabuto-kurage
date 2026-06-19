@@ -767,6 +767,7 @@ dependencies = [
     { name = "deltalake" },
     { name = "httpx" },
     { name = "pyarrow" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -783,6 +784,7 @@ requires-dist = [
     { name = "deltalake", specifier = ">=1.2.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "pyarrow", specifier = ">=22.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
 ]
 
 [package.metadata.requires-dev]

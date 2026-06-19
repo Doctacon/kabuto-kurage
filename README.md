@@ -14,9 +14,10 @@ The repository is currently at the **scaffold** milestone:
 - Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
 - Source and test layout are in place.
 - Dagster has a stable code-location module, but real assets are intentionally deferred to later tickets.
+- Tenant/source configuration is represented in `config/tenants.example.yaml`.
 - Secrets and generated local data are ignored by git.
 
-Real GitHub ingestion, tenant configuration, Delta table design, and Dagster asset graph work are tracked in Loom tickets under `.loom/tickets/`.
+Real GitHub ingestion, Delta table writes, and Dagster asset graph work are tracked in Loom tickets under `.loom/tickets/`.
 
 ## Prerequisites
 
@@ -29,11 +30,13 @@ Real GitHub ingestion, tenant configuration, Delta table design, and Dagster ass
 uv sync
 ```
 
-Optional local secrets setup:
+Optional local secrets/config setup:
 
 ```bash
 cp .env.example .env
-# Edit .env and set GITHUB_TOKEN or GH_TOKEN when GitHub ingestion is implemented.
+cp config/tenants.example.yaml config/tenants.local.yaml
+# Edit .env and config/tenants.local.yaml for local owner/repository choices.
+# Set GITHUB_TOKEN or GH_TOKEN when GitHub ingestion is implemented.
 ```
 
 ## Developer commands
@@ -54,6 +57,12 @@ Run type checks:
 
 ```bash
 uv run mypy src
+```
+
+Validate tenant/source configuration in Python:
+
+```bash
+uv run python -c "from kabuto_kurage.tenancy import load_tenant_registry; print(load_tenant_registry().tenant_ids)"
 ```
 
 Start Dagster UI/code location:
@@ -85,6 +94,10 @@ Ignored local paths include:
 - local SQLite/database files
 
 By default, generated data should live under `.local/data`. Override with `KABUTO_DATA_ROOT` when needed.
+
+Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
+
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered.
 
 ## Project memory
 

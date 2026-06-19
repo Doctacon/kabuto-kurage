@@ -26,6 +26,7 @@ from kabuto_kurage.ingestion.github_bronze import (
     RateLimitSnapshot,
     ingest_tenant_github_to_bronze,
 )
+from kabuto_kurage.observability import GitHubTableObservabilityConfig, observe_github_table
 from kabuto_kurage.paths import data_root, delta_table_path
 from kabuto_kurage.tenancy import load_tenant_registry, validate_tenant_id
 from kabuto_kurage.transforms.github_gold import (
@@ -344,7 +345,39 @@ def _common_metadata(
     if table_path.exists():
         delta_table = DeltaTable(str(table_path))
         metadata["delta_version"] = delta_table.version()
+    metadata.update(
+        observe_github_table(
+            tenant_id=tenant_id,
+            config=GitHubTableObservabilityConfig(
+                layer=layer,
+                resource_type=resource_type,
+                freshness_column=_freshness_column(layer, resource_type),
+                ingestion_run_column=_ingestion_run_column(layer, resource_type),
+                rate_limit_column=("rate_limit_json" if layer == "bronze" else None),
+            ),
+        ).as_dagster_metadata()
+    )
     return metadata
+
+
+def _freshness_column(layer: str, resource_type: str) -> str | None:
+    if layer in {"bronze", "silver"}:
+        return "fetched_at"
+    if layer == "gold" and resource_type == PR_THROUGHPUT_DAILY_TABLE:
+        return "latest_fetched_at"
+    if layer == "gold" and resource_type == PR_CYCLE_TIME_TABLE:
+        return "fetched_at"
+    return None
+
+
+def _ingestion_run_column(layer: str, resource_type: str) -> str | None:
+    if layer in {"bronze", "silver"}:
+        return "ingestion_run_id"
+    if layer == "gold" and resource_type == PR_THROUGHPUT_DAILY_TABLE:
+        return "latest_ingestion_run_id"
+    if layer == "gold" and resource_type == PR_CYCLE_TIME_TABLE:
+        return "ingestion_run_id"
+    return None
 
 
 def _latest_silver_lineage(table_path: Path) -> dict[str, str | None]:

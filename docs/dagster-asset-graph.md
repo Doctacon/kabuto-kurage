@@ -86,9 +86,15 @@ Each materialization includes metadata intended to make the Dagster UI useful fo
 - `delta_table_path`
 - `delta_version`
 - `data_root`
-- Bronze-only: `ingestion_run_id`, `fetched_at`, `rate_limit_snapshots`, and `minimum_rate_limit_remaining` when GitHub returns rate-limit headers.
+- `observed_row_count`
+- `freshness_status`
+- `freshness_lag_seconds` / `freshness_lag_hours` when lineage timestamps are present
+- `latest_successful_ingestion_at` and `latest_ingestion_run_id` when lineage columns are present
+- Bronze-only: `ingestion_run_id`, `fetched_at`, `rate_limit_snapshots`, `minimum_rate_limit_remaining`, and observed `rate_limit_*` fields when GitHub returns rate-limit headers.
 - Silver-only: latest bronze `ingestion_run_id` and `fetched_at` observed in the silver table when available.
 - Gold-only: metric grain/unit notes such as `tenant_repository_day` for throughput and `hours_and_days` for cycle time.
+
+Use `uv run python tools/observe_github.py --tenant sandbox --format table` outside Dagster to inspect the same freshness and row-count signals across all known GitHub tables.
 
 ## Out of Scope
 

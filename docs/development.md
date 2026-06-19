@@ -55,6 +55,16 @@ uv run python tools/build_github_gold.py --tenant sandbox
 
 For temporary validation data roots, use the same `--data-root` used for bronze and silver.
 
+## Local observability
+
+After bronze/silver/gold tables exist, inspect local freshness, row counts, last-ingested state, and rate-limit status:
+
+```bash
+uv run python tools/observe_github.py --tenant sandbox --format table
+```
+
+Use the same `--data-root` as ingestion/transformation commands when inspecting temporary validation data.
+
 ## Dagster
 
 ```bash
@@ -85,4 +95,6 @@ uv run dagster asset materialize \
   --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 ```
 
-See `docs/dagster-asset-graph.md` for asset metadata and graph details.
+Dagster materializations include local operational metadata such as `observed_row_count`, `freshness_status`, `freshness_lag_hours`, `latest_successful_ingestion_at`, `latest_ingestion_run_id`, and bronze rate-limit fields.
+
+See `docs/dagster-asset-graph.md` for asset metadata and graph details. See `docs/observability.md` for the local freshness command and stale/failed ingestion interpretation.

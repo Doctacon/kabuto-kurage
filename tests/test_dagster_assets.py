@@ -188,6 +188,10 @@ def test_github_asset_graph_materializes_bronze_silver_and_gold_without_live_git
         assert materialization.metadata["source"].value == "github"
         assert "delta_table_path" in materialization.metadata
         assert materialization.metadata["delta_version"].value == 0
+        assert materialization.metadata["observed_row_count"].value == expected_count
+        assert materialization.metadata["freshness_status"].value in {"fresh", "stale"}
+        assert "latest_successful_ingestion_at" in materialization.metadata
+        assert materialization.metadata["latest_ingestion_run_id"].value == "dagster-test-run"
 
     assert materializations["github_bronze_pull_requests"].metadata[
         "minimum_rate_limit_remaining"

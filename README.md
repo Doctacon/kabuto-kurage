@@ -18,6 +18,7 @@ The repository is currently at the **gold GitHub metrics** milestone:
 - Stable silver repository and pull request models can be materialized from bronze Delta tables.
 - Dagster exposes tenant-partitioned GitHub bronze, silver, and gold metric assets as the first user-facing surface.
 - Gold metrics compute daily PR throughput and PR open-to-merge cycle time into tenant-scoped Delta tables.
+- Lightweight local observability reports row counts, last successful ingestion, freshness/lag, and GitHub rate-limit status from Delta tables and Dagster metadata.
 - Secrets and generated local data are ignored by git.
 
 ## Prerequisites
@@ -112,6 +113,14 @@ Build GitHub gold metrics from existing silver tables without Dagster:
 uv run python tools/build_github_gold.py --tenant sandbox
 ```
 
+Inspect local freshness, last-ingested state, row counts, and rate-limit status:
+
+```bash
+uv run python tools/observe_github.py --tenant sandbox --format table
+```
+
+Missing bronze tables mean ingestion has never written that resource for the tenant. Empty bronze tables mean the latest successful ingestion wrote zero rows. Stale bronze tables mean the latest observed `fetched_at` is older than the configured freshness threshold.
+
 Materialize the full GitHub bronze/silver/gold asset graph from the CLI:
 
 ```bash
@@ -145,7 +154,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/github-gold-metrics.md` for metric definitions, columns, and limitations. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/github-gold-metrics.md` for metric definitions, columns, and limitations. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata. See `docs/observability.md` for local freshness, row-count, last-ingested, and failure-detection signals.
 
 ## Project memory
 

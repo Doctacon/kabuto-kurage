@@ -215,7 +215,15 @@ The Dagster code location exposes six tenant-partitioned GitHub assets:
 - `github_gold_pr_throughput_daily`
 - `github_gold_pr_cycle_time`
 
-Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
+Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe live demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
+
+For deterministic no-token demos or smoke validation, start Dagster in fixture mode:
+
+```bash
+KABUTO_GITHUB_FIXTURE_MODE=1 task dagster
+```
+
+Fixture mode writes one synthetic repository and pull request per tenant through the same bronze→silver→gold asset chain. It is for local demos/tests only; live GitHub ingestion still requires `GITHUB_TOKEN` or `GH_TOKEN`.
 
 CLI materialization equivalent through Taskfile:
 

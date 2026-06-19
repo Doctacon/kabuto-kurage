@@ -152,7 +152,7 @@ Dagster is the first user-facing surface for the project.
 task dagster
 ```
 
-This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/dagster` as the default Dagster home, resolved to an absolute path because Dagster rejects relative `DAGSTER_HOME` values. Open the URL printed by Dagster. In the asset graph:
+This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/dagster` as the default Dagster home, resolved to an absolute path because Dagster rejects relative `DAGSTER_HOME` values. For live GitHub materialization, export `GITHUB_TOKEN` or `GH_TOKEN` before clicking the bronze assets. For deterministic no-token demo materialization, start Dagster with `KABUTO_GITHUB_FIXTURE_MODE=1 task dagster`. Open the URL printed by Dagster. In the asset graph:
 
 1. choose a tenant partition such as `sandbox`;
 2. materialize the GitHub bronze assets;

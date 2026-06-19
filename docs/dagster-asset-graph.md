@@ -48,7 +48,15 @@ Or use the Taskfile wrapper, which resolves the default Dagster home to an absol
 task dagster
 ```
 
-Open the URL printed by Dagster, select a tenant partition such as `sandbox`, and materialize the GitHub assets. Set `GITHUB_TOKEN` or `GH_TOKEN` before materializing bronze assets against the live GitHub API.
+Open the URL printed by Dagster, select a tenant partition such as `sandbox`, and materialize the GitHub assets. Set `GITHUB_TOKEN` or `GH_TOKEN` before materializing bronze assets against the live GitHub API. If neither token nor fixture mode is configured, `task dagster` prints a warning before launching the UI because bronze materialization will fail without one of those inputs.
+
+For deterministic no-token demos and smoke tests, start Dagster with fixture mode:
+
+```bash
+KABUTO_GITHUB_FIXTURE_MODE=1 task dagster
+```
+
+Fixture mode writes one synthetic repository and pull request through the same bronze, silver, and gold assets. It is intended for local demos/tests, not live ingestion.
 
 For safer local demos, limit discovered repositories before starting Dagster:
 

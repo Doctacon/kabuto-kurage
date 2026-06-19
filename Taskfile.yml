@@ -74,6 +74,9 @@ tasks:
           *) dagster_home_abs="$PWD/$dagster_home" ;;
         esac
         mkdir -p "$dagster_home_abs"
+        if [ -z "${GITHUB_TOKEN:-}" ] && [ -z "${GH_TOKEN:-}" ] && [ "${KABUTO_GITHUB_FIXTURE_MODE:-}" != "1" ]; then
+          printf '%s\n' 'WARNING: bronze GitHub assets require GITHUB_TOKEN/GH_TOKEN, or set KABUTO_GITHUB_FIXTURE_MODE=1 for deterministic demo materialization.' >&2
+        fi
         DAGSTER_HOME="$dagster_home_abs" uv run dagster dev -m kabuto_kurage.definitions
 
   materialize:

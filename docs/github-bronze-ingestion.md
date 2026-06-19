@@ -156,9 +156,15 @@ This first bronze path uses per-tenant/resource **overwrite** writes:
 
 That keeps repeated local runs idempotent for the configured scope and avoids duplicate raw rows while preserving raw payloads, run metadata, and dlt schema/state artifacts for the latest extraction. Historical run retention can be introduced later if the project needs immutable append-only bronze history.
 
+## Fixture Mode for Dagster Smoke Tests
+
+Set `KABUTO_GITHUB_FIXTURE_MODE=1` to materialize bronze assets without live GitHub credentials. Fixture mode emits one synthetic repository and one synthetic pull request for the requested tenant, then writes the same bronze schema and dlt schema/state artifacts as the normal path.
+
+Use fixture mode for deterministic local demos and Dagster materialization smoke tests only. It is not live ingestion and should not be used as evidence of GitHub API connectivity.
+
 ## Failure Behavior
 
-- Missing token: ingestion fails before making API requests with a message asking for the configured token env var or `GH_TOKEN`.
+- Missing token: live ingestion fails before making API requests with a message asking for the configured token env var or `GH_TOKEN`; use `KABUTO_GITHUB_FIXTURE_MODE=1` only for deterministic no-token demos/tests.
 - HTTP errors: ingestion fails with the response status and request URL. Rate-limit exhaustion is called out when headers indicate it.
 - Unexpected response shape: ingestion fails if list endpoints do not return lists or object endpoints do not return mappings.
 - Partial writes: API fetching completes before Delta writes begin, so a fetch failure does not overwrite existing bronze tables.

@@ -95,6 +95,14 @@ def test_taskfile_uses_absolute_dagster_home_for_dagster_commands() -> None:
         assert 'DAGSTER_HOME="$dagster_home_abs"' in commands
 
 
+def test_taskfile_dagster_warns_when_no_token_or_fixture_mode_is_configured() -> None:
+    commands = "\n".join(task_commands(load_taskfile()["tasks"]["dagster"]))
+
+    assert "KABUTO_GITHUB_FIXTURE_MODE" in commands
+    assert "bronze GitHub assets require GITHUB_TOKEN/GH_TOKEN" in commands
+    assert "deterministic demo materialization" in commands
+
+
 def test_taskfile_does_not_echo_secret_values() -> None:
     commands = all_task_commands(load_taskfile())
     forbidden_command_fragments = [

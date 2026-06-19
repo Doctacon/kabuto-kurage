@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import dlt
 import pyarrow as pa
@@ -36,6 +36,7 @@ PULL_REQUEST_RESOURCE = "pull_requests"
 DEFAULT_USER_AGENT = "kabuto-kurage-github-bronze-ingestion"
 DLT_BRONZE_SOURCE_NAME = "github_bronze"
 DLT_ARTIFACT_SCHEMA_VERSION = 1
+GITHUB_FIXTURE_MODE_ENV = "KABUTO_GITHUB_FIXTURE_MODE"
 
 BRONZE_SCHEMA = pa.schema(
     [
@@ -176,6 +177,16 @@ class GitHubBronzeIngestionResult:
         }
 
 
+class GitHubClientProtocol(Protocol):
+    """Protocol for live or fixture GitHub extraction clients."""
+
+    def get_paginated(
+        self, path: str, *, params: Mapping[str, str | int] | None = None
+    ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]: ...
+
+    def get_one(self, path: str) -> tuple[dict[str, Any], RateLimitSnapshot]: ...
+
+
 class GitHubDltSourceContext:
     """Shared dlt source/resource context for one tenant's GitHub bronze extraction."""
 
@@ -184,7 +195,7 @@ class GitHubDltSourceContext:
         *,
         tenant: TenantConfig,
         source_config: GitHubSourceConfig,
-        client: GitHubRestClient,
+        client: GitHubClientProtocol,
         ingestion_run_id: str,
         fetched_at: datetime,
         max_repositories: int | None,
@@ -444,29 +455,37 @@ def ingest_tenant_github_to_bronze(
     run_id = ingestion_run_id or str(uuid.uuid4())
     run_fetched_at = fetched_at or datetime.now(tz=UTC)
     source_config = tenant.github
-    github_token = token if token is not None else _token_from_env(source_config)
-    owned_client = client is None
-    github = client or GitHubRestClient(
-        api_base_url=source_config.api_base_url,
-        token=github_token,
-    )
+    if _fixture_mode_enabled():
+        repository_records, pull_request_records, context, dlt_source = _fixture_bronze_records(
+            tenant,
+            source_config=source_config,
+            ingestion_run_id=run_id,
+            fetched_at=run_fetched_at,
+        )
+    else:
+        github_token = token if token is not None else _token_from_env(source_config)
+        owned_client = client is None
+        github = client or GitHubRestClient(
+            api_base_url=source_config.api_base_url,
+            token=github_token,
+        )
 
-    context = GitHubDltSourceContext(
-        tenant=tenant,
-        source_config=source_config,
-        client=github,
-        ingestion_run_id=run_id,
-        fetched_at=run_fetched_at,
-        max_repositories=max_repositories,
-    )
-    dlt_source = build_github_bronze_dlt_source(context)
+        context = GitHubDltSourceContext(
+            tenant=tenant,
+            source_config=source_config,
+            client=github,
+            ingestion_run_id=run_id,
+            fetched_at=run_fetched_at,
+            max_repositories=max_repositories,
+        )
+        dlt_source = build_github_bronze_dlt_source(context)
 
-    try:
-        repository_records = list(dlt_source.resources[REPOSITORY_RESOURCE])
-        pull_request_records = list(dlt_source.resources[PULL_REQUEST_RESOURCE])
-    finally:
-        if owned_client:
-            github.close()
+        try:
+            repository_records = list(dlt_source.resources[REPOSITORY_RESOURCE])
+            pull_request_records = list(dlt_source.resources[PULL_REQUEST_RESOURCE])
+        finally:
+            if owned_client:
+                github.close()
 
     repository_path = delta_table_path(
         tenant.tenant_id, "bronze", GITHUB_SOURCE, REPOSITORY_RESOURCE
@@ -490,6 +509,117 @@ def ingest_tenant_github_to_bronze(
         ),
         rate_limits=context.rate_limits(),
         dlt_artifacts=dlt_artifacts,
+    )
+
+
+def _fixture_mode_enabled() -> bool:
+    configured = os.environ.get(GITHUB_FIXTURE_MODE_ENV, "")
+    return configured.lower() in {"1", "true", "yes", "on"}
+
+
+def _fixture_bronze_records(
+    tenant: TenantConfig,
+    *,
+    source_config: GitHubSourceConfig,
+    ingestion_run_id: str,
+    fetched_at: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], GitHubDltSourceContext, DltSource]:
+    repository_full_name = _fixture_repository_full_name(source_config)
+    repository_payload = _fixture_repository_payload(repository_full_name)
+    pull_request_payload = _fixture_pull_request_payload(repository_full_name)
+    context = GitHubDltSourceContext(
+        tenant=tenant,
+        source_config=source_config,
+        client=_FixtureGitHubClient(repository_payload, pull_request_payload),
+        ingestion_run_id=ingestion_run_id,
+        fetched_at=fetched_at,
+        max_repositories=1,
+    )
+    dlt_source = build_github_bronze_dlt_source(context)
+    repository_records = list(dlt_source.resources[REPOSITORY_RESOURCE])
+    pull_request_records = list(dlt_source.resources[PULL_REQUEST_RESOURCE])
+    return repository_records, pull_request_records, context, dlt_source
+
+
+class _FixtureGitHubClient:
+    def __init__(self, repository_payload: dict[str, Any], pull_request_payload: dict[str, Any]):
+        self._repository_payload = repository_payload
+        self._pull_request_payload = pull_request_payload
+
+    def get_paginated(
+        self, path: str, *, params: Mapping[str, str | int] | None = None
+    ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
+        del params
+        if path.endswith("/repos"):
+            return [self._repository_payload], [_fixture_rate_limit(remaining=4999)]
+        if path.endswith("/pulls"):
+            return [self._pull_request_payload], [_fixture_rate_limit(remaining=4998)]
+        raise GitHubIngestionError(f"Unexpected fixture GitHub paginated path: {path}")
+
+    def get_one(self, path: str) -> tuple[dict[str, Any], RateLimitSnapshot]:
+        if path.startswith("/repos/"):
+            return self._repository_payload, _fixture_rate_limit(remaining=4997)
+        raise GitHubIngestionError(f"Unexpected fixture GitHub object path: {path}")
+
+
+def _fixture_repository_full_name(source_config: GitHubSourceConfig) -> str:
+    if source_config.repositories:
+        return source_config.repositories[0]
+    if source_config.owners:
+        return f"{source_config.owners[0]}/kabuto-kurage-fixture"
+    return "octocat/Hello-World"
+
+
+def _fixture_repository_payload(full_name: str) -> dict[str, Any]:
+    owner, name = full_name.split("/", 1)
+    return {
+        "id": 1296269,
+        "node_id": f"fixture-repository-{owner}-{name}",
+        "name": name,
+        "full_name": full_name,
+        "owner": {"login": owner},
+        "html_url": f"https://github.com/{full_name}",
+        "url": f"https://api.github.com/repos/{full_name}",
+        "private": False,
+        "fork": False,
+        "archived": False,
+        "disabled": False,
+        "default_branch": "main",
+        "language": "Python",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-06-01T00:00:00Z",
+        "pushed_at": "2026-06-02T00:00:00Z",
+    }
+
+
+def _fixture_pull_request_payload(full_name: str) -> dict[str, Any]:
+    return {
+        "id": 1,
+        "node_id": f"fixture-pull-request-{full_name.replace('/', '-')}",
+        "number": 1,
+        "state": "closed",
+        "title": "Fixture PR for Dagster materialization smoke test",
+        "user": {"login": "octocat"},
+        "author_association": "OWNER",
+        "draft": False,
+        "html_url": f"https://github.com/{full_name}/pull/1",
+        "url": f"https://api.github.com/repos/{full_name}/pulls/1",
+        "base": {"ref": "main", "repo": {"full_name": full_name}},
+        "head": {"ref": "fixture", "repo": {"full_name": full_name}},
+        "created_at": "2026-06-01T00:00:00Z",
+        "updated_at": "2026-06-01T12:00:00Z",
+        "closed_at": "2026-06-02T00:00:00Z",
+        "merged_at": "2026-06-02T00:00:00Z",
+    }
+
+
+def _fixture_rate_limit(*, remaining: int) -> RateLimitSnapshot:
+    return RateLimitSnapshot(
+        limit=5000,
+        remaining=remaining,
+        used=5000 - remaining,
+        reset_epoch_seconds=1781800000,
+        resource="fixture",
     )
 
 
@@ -535,7 +665,7 @@ def _dlt_artifact_root(tenant_id: str) -> Path:
 
 
 def fetch_configured_repositories(
-    client: GitHubRestClient,
+    client: GitHubClientProtocol,
     source_config: GitHubSourceConfig,
     *,
     max_repositories: int | None = None,
@@ -571,7 +701,7 @@ def fetch_configured_repositories(
 
 
 def fetch_pull_requests_for_repositories(
-    client: GitHubRestClient, repositories: Sequence[Mapping[str, Any]]
+    client: GitHubClientProtocol, repositories: Sequence[Mapping[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
     """Fetch all pull requests for each repository payload."""
 

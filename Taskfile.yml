@@ -67,14 +67,26 @@ tasks:
   dagster:
     desc: Start Dagster UI for the project asset graph.
     cmds:
-      - mkdir -p "{{.DAGSTER_HOME}}"
-      - DAGSTER_HOME="{{.DAGSTER_HOME}}" uv run dagster dev -m kabuto_kurage.definitions
+      - |
+        dagster_home="{{.DAGSTER_HOME}}"
+        case "$dagster_home" in
+          /*) dagster_home_abs="$dagster_home" ;;
+          *) dagster_home_abs="$PWD/$dagster_home" ;;
+        esac
+        mkdir -p "$dagster_home_abs"
+        DAGSTER_HOME="$dagster_home_abs" uv run dagster dev -m kabuto_kurage.definitions
 
   materialize:
     desc: Materialize the full GitHub asset chain for one tenant partition.
     cmds:
       - |
-        uv run dagster asset materialize \
+        dagster_home="{{.DAGSTER_HOME}}"
+        case "$dagster_home" in
+          /*) dagster_home_abs="$dagster_home" ;;
+          *) dagster_home_abs="$PWD/$dagster_home" ;;
+        esac
+        mkdir -p "$dagster_home_abs"
+        DAGSTER_HOME="$dagster_home_abs" uv run dagster asset materialize \
           -m kabuto_kurage.definitions \
           --partition "{{.TENANT}}" \
           --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time

@@ -200,6 +200,12 @@ uv run python tools/observe_github.py --tenant sandbox --format table
 task dagster
 ```
 
+The Taskfile resolves the default `.local/dagster` directory to an absolute `DAGSTER_HOME` before invoking Dagster, because Dagster rejects relative `DAGSTER_HOME` values. You may override it with an absolute path when needed:
+
+```bash
+task dagster dagster_home=/tmp/kabuto-dagster
+```
+
 The Dagster code location exposes six tenant-partitioned GitHub assets:
 
 - `github_bronze_repositories`

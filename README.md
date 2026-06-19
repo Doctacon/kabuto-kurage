@@ -152,7 +152,7 @@ Dagster is the first user-facing surface for the project.
 task dagster
 ```
 
-This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/dagster` as the default `DAGSTER_HOME`. Open the URL printed by Dagster. In the asset graph:
+This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/dagster` as the default Dagster home, resolved to an absolute path because Dagster rejects relative `DAGSTER_HOME` values. Open the URL printed by Dagster. In the asset graph:
 
 1. choose a tenant partition such as `sandbox`;
 2. materialize the GitHub bronze assets;
@@ -162,6 +162,8 @@ This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/da
 CLI equivalent:
 
 ```bash
+export DAGSTER_HOME="$PWD/.local/dagster"
+mkdir -p "$DAGSTER_HOME"
 uv run dagster asset materialize \
   -m kabuto_kurage.definitions \
   --partition sandbox \

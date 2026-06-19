@@ -86,6 +86,15 @@ def test_taskfile_supports_tenant_parameterized_pipeline_tasks() -> None:
     assert "tools/observe_github.py" in commands
 
 
+def test_taskfile_uses_absolute_dagster_home_for_dagster_commands() -> None:
+    taskfile = load_taskfile()
+    for task_name in ["dagster", "materialize"]:
+        commands = "\n".join(task_commands(taskfile["tasks"][task_name]))
+        assert "dagster_home_abs" in commands
+        assert '*) dagster_home_abs="$PWD/$dagster_home" ;;' in commands
+        assert 'DAGSTER_HOME="$dagster_home_abs"' in commands
+
+
 def test_taskfile_does_not_echo_secret_values() -> None:
     commands = all_task_commands(load_taskfile())
     forbidden_command_fragments = [

@@ -37,9 +37,15 @@ Restart Dagster after changing tenant config so the partition list refreshes.
 ## Start Dagster UI
 
 ```bash
-export DAGSTER_HOME=.local/dagster
+export DAGSTER_HOME="$PWD/.local/dagster"
 mkdir -p "$DAGSTER_HOME"
 uv run dagster dev -m kabuto_kurage.definitions
+```
+
+Or use the Taskfile wrapper, which resolves the default Dagster home to an absolute path for you:
+
+```bash
+task dagster
 ```
 
 Open the URL printed by Dagster, select a tenant partition such as `sandbox`, and materialize the GitHub assets. Set `GITHUB_TOKEN` or `GH_TOKEN` before materializing bronze assets against the live GitHub API.
@@ -57,6 +63,8 @@ The same graph can be materialized without opening the UI:
 ```bash
 export GITHUB_TOKEN=...
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
+export DAGSTER_HOME="$PWD/.local/dagster"
+mkdir -p "$DAGSTER_HOME"
 uv run dagster asset materialize \
   -m kabuto_kurage.definitions \
   --partition sandbox \

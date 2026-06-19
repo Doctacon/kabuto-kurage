@@ -1,2 +1,96 @@
 # kabuto-kurage
+
 <img src="images/kabuto-kurage.png" width="300" />
+
+`kabuto-kurage` is a local, open-source-first portfolio data platform for learning the infrastructure and data-engineering patterns behind engineering intelligence products.
+
+The target shape is a miniature Jellyfish-inspired platform: GitHub engineering activity flows into Delta Lake, Dagster orchestrates the assets, tenant boundaries are explicit, and later milestones compute delivery/productivity metrics with operational visibility.
+
+## Current milestone
+
+The repository is currently at the **scaffold** milestone:
+
+- Python 3.11+ project managed with `uv`.
+- Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
+- Source and test layout are in place.
+- Dagster has a stable code-location module, but real assets are intentionally deferred to later tickets.
+- Secrets and generated local data are ignored by git.
+
+Real GitHub ingestion, tenant configuration, Delta table design, and Dagster asset graph work are tracked in Loom tickets under `.loom/tickets/`.
+
+## Prerequisites
+
+- Python 3.11+
+- [`uv`](https://docs.astral.sh/uv/)
+
+## Install
+
+```bash
+uv sync
+```
+
+Optional local secrets setup:
+
+```bash
+cp .env.example .env
+# Edit .env and set GITHUB_TOKEN or GH_TOKEN when GitHub ingestion is implemented.
+```
+
+## Developer commands
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Run lint:
+
+```bash
+uv run ruff check .
+```
+
+Run type checks:
+
+```bash
+uv run mypy src
+```
+
+Start Dagster UI/code location:
+
+```bash
+export DAGSTER_HOME=.local/dagster
+mkdir -p "$DAGSTER_HOME"
+uv run dagster dev -m kabuto_kurage.definitions
+```
+
+The scaffold exposes an empty Dagster `Definitions` object so the command remains stable while downstream tickets add assets.
+
+Run the stack validation proof from the previous milestone:
+
+```bash
+uv run python tools/validate_stack.py
+```
+
+## Local data and secrets
+
+Ignored local paths include:
+
+- `.env` / `.env.*` except `.env.example`
+- `.local/`
+- `data/`
+- `.dagster/`
+- `dagster_home/`
+- `storage/`
+- local SQLite/database files
+
+By default, generated data should live under `.local/data`. Override with `KABUTO_DATA_ROOT` when needed.
+
+## Project memory
+
+Durable context lives under `.loom/`:
+
+- `.loom/specs/mini-engineering-intelligence-platform.md`
+- `.loom/decisions/initial-portfolio-architecture.md`
+- `.loom/research/2026-06-18-jellyfish-company-research.md`
+- `.loom/tickets/2026-06-18-build-mini-engineering-intelligence-platform.md`

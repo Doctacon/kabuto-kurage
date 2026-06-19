@@ -1,0 +1,49 @@
+[project]
+name = "kabuto-kurage"
+version = "0.1.0"
+description = "Local portfolio data platform for learning engineering intelligence infrastructure patterns."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Chris Lough" }
+]
+dependencies = [
+  "dagster>=1.12.0",
+  "dagster-webserver>=1.12.0",
+  "deltalake>=1.2.0",
+  "httpx>=0.28.0",
+  "pyarrow>=22.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.19.0",
+  "pytest>=9.0.0",
+  "ruff>=0.14.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kabuto_kurage"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+packages = ["kabuto_kurage"]

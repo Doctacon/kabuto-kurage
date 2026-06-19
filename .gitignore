@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Local runtime state and generated data
+.local/
+data/
+.dagster/
+dagster_home/
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/

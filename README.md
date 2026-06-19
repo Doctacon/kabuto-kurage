@@ -84,7 +84,7 @@ Optional local infrastructure path:
 - Terraform CLI
 - Docker + `docker-compose` or `docker compose`
 
-Live GitHub materialization requires either a GitHub token in `GITHUB_TOKEN`/`GH_TOKEN` or GitHub App credentials. Tests do not require live credentials.
+Live GitHub materialization requires a GitHub token in `GITHUB_TOKEN` or `GH_TOKEN`. Tests do not require live credentials.
 
 ## Storage profiles and secret handling
 

@@ -15,16 +15,11 @@ from requests.models import PreparedRequest
 
 from kabuto_kurage.ingestion.github_bronze import (
     DLT_BRONZE_SOURCE_NAME,
-    GITHUB_APP_ID_ENV,
-    GITHUB_APP_INSTALLATION_ID_ENV,
-    GITHUB_APP_PRIVATE_KEY_ENV,
-    GITHUB_AUTH_MODE_ENV,
     GitHubDltSourceContext,
     GitHubRestClient,
     RateLimitSnapshot,
     build_github_bronze_dlt_source,
     ingest_tenant_github_to_bronze,
-    mint_github_app_installation_token,
     pull_request_payload_to_bronze_record,
     repository_payload_to_bronze_record,
 )
@@ -403,40 +398,3 @@ def test_incremental_pull_request_sync_preserves_existing_bronze_rows(
     incremental_state = json.loads(incremental_state_path.read_text(encoding="utf-8"))
     assert incremental_state["pull_requests"]["octocat/Hello-World"] == "2026-06-03T00:00:00Z"
 
-
-class GitHubAppTokenSession:
-    def __init__(self) -> None:
-        self.authorization_header: str | None = None
-
-    def post(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str],
-        timeout: int,
-    ) -> requests.Response:
-        assert url == "https://api.github.com/app/installations/456/access_tokens"
-        assert timeout == 30
-        self.authorization_header = headers["Authorization"]
-        github_response = requests.Response()
-        github_response.status_code = 201
-        github_response.url = url
-        github_response._content = json.dumps({"token": "installation-token"}).encode("utf-8")
-        return github_response
-
-
-def test_github_app_auth_mints_installation_token(monkeypatch) -> None:
-    monkeypatch.setenv(GITHUB_APP_ID_ENV, "123")
-    monkeypatch.setenv(GITHUB_APP_INSTALLATION_ID_ENV, "456")
-    monkeypatch.setenv(GITHUB_APP_PRIVATE_KEY_ENV, "private-key")
-    monkeypatch.setenv(GITHUB_AUTH_MODE_ENV, "app")
-    monkeypatch.setattr(
-        "kabuto_kurage.ingestion.github_bronze.jwt.encode",
-        lambda *_args, **_kwargs: "jwt-token",
-    )
-    session = GitHubAppTokenSession()
-
-    token = mint_github_app_installation_token(session=session)  # type: ignore[arg-type]
-
-    assert token == "installation-token"
-    assert session.authorization_header == "Bearer jwt-token"

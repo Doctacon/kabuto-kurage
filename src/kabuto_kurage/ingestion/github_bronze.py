@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import time
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -19,7 +18,6 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import dlt
-import jwt
 import pyarrow as pa
 import requests
 from deltalake import DeltaTable, write_deltalake
@@ -41,11 +39,7 @@ DLT_ARTIFACT_SCHEMA_VERSION = 1
 GITHUB_FIXTURE_MODE_ENV = "KABUTO_GITHUB_FIXTURE_MODE"
 GITHUB_INCREMENTAL_ENABLED_ENV = "KABUTO_GITHUB_INCREMENTAL_ENABLED"
 GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV = "KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS"
-GITHUB_APP_ID_ENV = "GITHUB_APP_ID"
-GITHUB_APP_INSTALLATION_ID_ENV = "GITHUB_APP_INSTALLATION_ID"
-GITHUB_APP_PRIVATE_KEY_ENV = "GITHUB_APP_PRIVATE_KEY"
-GITHUB_APP_PRIVATE_KEY_PATH_ENV = "GITHUB_APP_PRIVATE_KEY_PATH"
-GITHUB_AUTH_MODE_ENV = "KABUTO_GITHUB_AUTH_MODE"
+
 
 BRONZE_SCHEMA = pa.schema(
     [
@@ -1032,90 +1026,16 @@ def _incremental_state_path(tenant_id: str) -> Path:
 
 
 def _token_from_env(source_config: GitHubSourceConfig) -> str:
-    auth_mode = os.environ.get(GITHUB_AUTH_MODE_ENV, "auto").lower()
-    if auth_mode not in {"auto", "pat", "app"}:
-        raise GitHubIngestionError(f"{GITHUB_AUTH_MODE_ENV} must be one of auto, pat, or app")
-    if auth_mode in {"auto", "pat"}:
-        token = os.environ.get(source_config.token_env)
-        if not token and source_config.token_env != "GH_TOKEN":
-            token = os.environ.get("GH_TOKEN")
-        if token:
-            return token
-        if auth_mode == "pat":
-            raise GitHubIngestionError(
-                f"GitHub token not found. Set {source_config.token_env}"
-                + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
-                + "."
-            )
-    if auth_mode in {"auto", "app"} and _github_app_configured():
-        return mint_github_app_installation_token()
-    raise GitHubIngestionError(
-        f"GitHub token not found. Set {source_config.token_env}"
-        + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
-        + f", or configure {GITHUB_APP_ID_ENV}, {GITHUB_APP_INSTALLATION_ID_ENV}, and "
-        + f"{GITHUB_APP_PRIVATE_KEY_ENV}/{GITHUB_APP_PRIVATE_KEY_PATH_ENV}."
-    )
-
-
-def _github_app_configured() -> bool:
-    return bool(
-        os.environ.get(GITHUB_APP_ID_ENV)
-        and os.environ.get(GITHUB_APP_INSTALLATION_ID_ENV)
-        and (
-            os.environ.get(GITHUB_APP_PRIVATE_KEY_ENV)
-            or os.environ.get(GITHUB_APP_PRIVATE_KEY_PATH_ENV)
-        )
-    )
-
-
-def mint_github_app_installation_token(session: requests.Session | None = None) -> str:
-    """Mint a short-lived GitHub App installation token from environment configuration."""
-
-    app_id = _required_env(GITHUB_APP_ID_ENV)
-    installation_id = _required_env(GITHUB_APP_INSTALLATION_ID_ENV)
-    private_key = _github_app_private_key()
-    now = int(time.time())
-    encoded_jwt = jwt.encode(
-        {"iat": now - 60, "exp": now + 9 * 60, "iss": app_id},
-        private_key,
-        algorithm="RS256",
-    )
-    http = session or requests.Session()
-    response = http.post(
-        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {encoded_jwt}",
-            "X-GitHub-Api-Version": GITHUB_API_VERSION,
-            "User-Agent": DEFAULT_USER_AGENT,
-        },
-        timeout=30,
-    )
-    _raise_for_status(response)
-    body = response.json()
-    token = body.get("token") if isinstance(body, Mapping) else None
-    if not isinstance(token, str) or not token:
-        raise GitHubIngestionError("GitHub App installation token response did not include token")
-    return token
-
-
-def _github_app_private_key() -> str:
-    private_key = os.environ.get(GITHUB_APP_PRIVATE_KEY_ENV)
-    if private_key:
-        return private_key.replace("\\n", "\n")
-    private_key_path = os.environ.get(GITHUB_APP_PRIVATE_KEY_PATH_ENV)
-    if not private_key_path:
+    token = os.environ.get(source_config.token_env)
+    if not token and source_config.token_env != "GH_TOKEN":
+        token = os.environ.get("GH_TOKEN")
+    if not token:
         raise GitHubIngestionError(
-            f"Set {GITHUB_APP_PRIVATE_KEY_ENV} or {GITHUB_APP_PRIVATE_KEY_PATH_ENV}"
+            f"GitHub token not found. Set {source_config.token_env}"
+            + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
+            + "."
         )
-    return Path(private_key_path).expanduser().read_text(encoding="utf-8")
-
-
-def _required_env(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise GitHubIngestionError(f"Missing required GitHub App environment variable: {name}")
-    return value
+    return token
 
 
 def _raise_for_status(response: requests.Response) -> None:

@@ -116,17 +116,6 @@ Export your GitHub token from Proton Pass or another password manager into the c
 export GITHUB_TOKEN=...
 ```
 
-For a more production-like credential flow, configure a GitHub App and let the ingestion code mint short-lived installation tokens:
-
-```bash
-export KABUTO_GITHUB_AUTH_MODE=app
-export GITHUB_APP_ID=...
-export GITHUB_APP_INSTALLATION_ID=...
-export GITHUB_APP_PRIVATE_KEY_PATH=/path/to/private-key.pem
-```
-
-`KABUTO_GITHUB_AUTH_MODE=auto` is the default: it uses `GITHUB_TOKEN`/`GH_TOKEN` when present, otherwise GitHub App credentials when fully configured.
-
 Then run bounded dlt-native bronze ingestion through Taskfile. The ingestion path uses dlt source/resources, records dlt schema/state artifacts, persists incremental PR cursor state, and preserves tenant-scoped bronze Delta tables:
 
 ```bash
@@ -226,7 +215,7 @@ The Dagster code location exposes six tenant-partitioned GitHub assets:
 - `github_gold_pr_throughput_daily`
 - `github_gold_pr_cycle_time`
 
-Set `GITHUB_TOKEN`/`GH_TOKEN` or GitHub App auth env vars, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe live demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster. The Dagster job includes an op retry policy, a stopped-by-default six-hour refresh schedule, and one `delta_table_health` asset check per GitHub asset.
+Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe live demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster. The Dagster job includes an op retry policy, a stopped-by-default six-hour refresh schedule, and one `delta_table_health` asset check per GitHub asset.
 
 For deterministic no-token demos or smoke validation, start Dagster in fixture mode:
 
@@ -234,7 +223,7 @@ For deterministic no-token demos or smoke validation, start Dagster in fixture m
 KABUTO_GITHUB_FIXTURE_MODE=1 task dagster
 ```
 
-Fixture mode writes one synthetic repository and pull request per tenant through the same bronze→silver→gold asset chain. It is for local demos/tests only; live GitHub ingestion still requires `GITHUB_TOKEN`/`GH_TOKEN` or GitHub App credentials.
+Fixture mode writes one synthetic repository and pull request per tenant through the same bronze→silver→gold asset chain. It is for local demos/tests only; live GitHub ingestion still requires `GITHUB_TOKEN` or `GH_TOKEN`.
 
 CLI materialization equivalent through Taskfile:
 

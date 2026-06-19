@@ -181,15 +181,14 @@ Use fixture mode for deterministic local demos and Dagster materialization smoke
 
 GitHub token values should be stored in Proton Pass or another password manager and exported into the shell only when needed. Tenant YAML stores the env-var name, not the value.
 
-Supported modes:
+Supported env vars:
 
-| Mode | Env vars | Notes |
-| --- | --- | --- |
-| PAT fallback | `GITHUB_TOKEN` or `GH_TOKEN` | Fast local path for fine-grained read-only PATs. |
-| GitHub App | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | Production-looking path that mints short-lived installation tokens. |
-| Auto | `KABUTO_GITHUB_AUTH_MODE=auto` | Uses PAT if present, otherwise GitHub App when fully configured. |
+| Env var | Notes |
+| --- | --- |
+| `GITHUB_TOKEN` | Preferred local variable for a read-only fine-grained PAT. |
+| `GH_TOKEN` | Fallback token variable when `GITHUB_TOKEN` is not set. |
 
-Use `KABUTO_GITHUB_AUTH_MODE=app` to require GitHub App auth and fail closed if app credentials are missing. Do not commit `.env`, `.local/`, `.dlt/`, GitHub tokens, GitHub App private keys, MinIO/R2 credentials, or dlt secrets. The dlt schema/state artifacts record source/resource metadata and row/rate-limit state, not token values.
+Do not commit `.env`, `.local/`, `.dlt/`, GitHub tokens, MinIO/R2 credentials, or dlt secrets. The dlt schema/state artifacts record source/resource metadata and row/rate-limit state, not token values.
 
 ## Out of Scope
 

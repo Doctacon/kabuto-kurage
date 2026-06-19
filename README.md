@@ -71,6 +71,7 @@ Minimum local path:
 
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/)
+- [`Task`](https://taskfile.dev/) for the primary documented command workflow
 
 Optional local infrastructure path:
 
@@ -81,16 +82,22 @@ Live GitHub materialization requires a GitHub token in `GITHUB_TOKEN` or `GH_TOK
 
 ## Quickstart: deterministic local validation
 
-From a fresh checkout:
+From a fresh checkout, use Taskfile as the primary workflow:
 
 ```bash
-uv sync
+task setup
+task validate
+```
+
+`task validate` wraps the deterministic validation commands:
+
+```bash
 uv run pytest
 uv run ruff check .
 uv run mypy src
 ```
 
-Expected current test shape: the suite covers stack/scaffold behavior, tenant config, GitHub bronze ingestion, silver models, gold metrics, Dagster assets, observability, local IaC, and tenant isolation.
+Expected current test shape: the suite covers stack/scaffold behavior, tenant config, GitHub bronze ingestion, silver models, gold metrics, Dagster assets, observability, local IaC, and tenant isolation. If Task is not installed yet, run the underlying `uv` commands directly.
 
 ## Quickstart: configure a bounded GitHub demo
 
@@ -116,12 +123,10 @@ export KABUTO_GITHUB_MAX_REPOSITORIES=1
 Dagster is the first user-facing surface for the project.
 
 ```bash
-export DAGSTER_HOME=.local/dagster
-mkdir -p "$DAGSTER_HOME"
-uv run dagster dev -m kabuto_kurage.definitions
+task dagster
 ```
 
-Open the URL printed by Dagster. In the asset graph:
+This wraps `uv run dagster dev -m kabuto_kurage.definitions` and uses `.local/dagster` as the default `DAGSTER_HOME`. Open the URL printed by Dagster. In the asset graph:
 
 1. choose a tenant partition such as `sandbox`;
 2. materialize the GitHub bronze assets;
@@ -141,38 +146,40 @@ See [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md).
 
 ## Run the pipeline without Dagster
 
-Bronze ingestion uses dlt REST helpers for GitHub extraction, then writes the existing tenant-scoped Delta bronze tables:
+Bronze ingestion uses dlt REST helpers for GitHub extraction, then writes the existing tenant-scoped Delta bronze tables. Use Taskfile first:
 
 ```bash
-uv run python tools/ingest_github_bronze.py --tenant sandbox --max-repositories 1
+task ingest tenant=sandbox max_repositories=1
 ```
 
 Silver models:
 
 ```bash
-uv run python tools/build_github_silver.py --tenant sandbox
+task silver tenant=sandbox
 ```
 
 Gold metrics:
 
 ```bash
-uv run python tools/build_github_gold.py --tenant sandbox
+task gold tenant=sandbox
 ```
 
 Inspect local operational state:
 
 ```bash
-uv run python tools/observe_github.py --tenant sandbox --format table
+task observe tenant=sandbox
 ```
 
 For isolated validation, pass the same temporary data root to all commands:
 
 ```bash
-uv run python tools/ingest_github_bronze.py --tenant sandbox --data-root /tmp/kabuto-demo --max-repositories 1
-uv run python tools/build_github_silver.py --tenant sandbox --data-root /tmp/kabuto-demo
-uv run python tools/build_github_gold.py --tenant sandbox --data-root /tmp/kabuto-demo
-uv run python tools/observe_github.py --tenant sandbox --data-root /tmp/kabuto-demo --format table
+task ingest tenant=sandbox data_root=/tmp/kabuto-demo max_repositories=1
+task silver tenant=sandbox data_root=/tmp/kabuto-demo
+task gold tenant=sandbox data_root=/tmp/kabuto-demo
+task observe tenant=sandbox data_root=/tmp/kabuto-demo
 ```
+
+The underlying Python scripts in `tools/` remain available as implementation entrypoints when direct invocation is useful.
 
 ## Run the tenant-scoped REST export API
 
@@ -180,7 +187,7 @@ After gold metrics exist, start the local FastAPI export surface:
 
 ```bash
 export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
-uv run uvicorn kabuto_kurage.api.app:app --reload
+task api
 ```
 
 Example calls:
@@ -224,7 +231,7 @@ Configure the same token allowlist used by REST, then run the stdio server:
 
 ```bash
 export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
-uv run python -m kabuto_kurage.mcp_server
+task mcp
 ```
 
 Each tool requires explicit `tenant_id` and `api_token` arguments. A token can read only tenants in its allowlist; no tool defaults to all tenants or returns bronze `payload_json`/secret values.

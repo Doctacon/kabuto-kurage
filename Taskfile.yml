@@ -1,0 +1,133 @@
+version: '3'
+
+# Task is the primary human-facing workflow for this project. The Python scripts in
+# tools/ remain as implementation entrypoints and are called by these tasks.
+#
+# Usage examples:
+#   task validate
+#   task ingest tenant=sandbox
+#   task silver tenant=sandbox
+#   task gold tenant=sandbox
+#   task observe tenant=sandbox
+#
+# Secrets such as GITHUB_TOKEN, GH_TOKEN, and R2 credentials are read from the
+# environment by the underlying tools. These tasks intentionally do not print or
+# interpolate secret values.
+
+vars:
+  TENANT: '{{.tenant | default "sandbox"}}'
+  DATA_ROOT: '{{.data_root | default ""}}'
+  MAX_REPOSITORIES: '{{.max_repositories | default ""}}'
+  OBSERVE_FORMAT: '{{.format | default "table"}}'
+  DAGSTER_HOME: '{{.dagster_home | default ".local/dagster"}}'
+
+tasks:
+  default:
+    desc: List available tasks.
+    cmds:
+      - task --list
+
+  setup:
+    desc: Sync Python dependencies with uv.
+    cmds:
+      - uv sync
+
+  sync:
+    desc: Alias for setup.
+    cmds:
+      - task: setup
+
+  test:
+    desc: Run deterministic tests.
+    cmds:
+      - uv run pytest
+
+  lint:
+    desc: Run Ruff lint checks.
+    cmds:
+      - uv run ruff check .
+
+  typecheck:
+    desc: Run mypy strict type checks.
+    cmds:
+      - uv run mypy src
+
+  validate:
+    desc: Run the full deterministic validation suite.
+    cmds:
+      - uv run pytest
+      - uv run ruff check .
+      - uv run mypy src
+
+  validate-stack:
+    desc: Validate local Delta, dlt, DuckDB, and Dagster stack assumptions.
+    cmds:
+      - uv run python tools/validate_stack.py
+
+  dagster:
+    desc: Start Dagster UI for the project asset graph.
+    cmds:
+      - mkdir -p "{{.DAGSTER_HOME}}"
+      - DAGSTER_HOME="{{.DAGSTER_HOME}}" uv run dagster dev -m kabuto_kurage.definitions
+
+  materialize:
+    desc: Materialize the full GitHub asset chain for one tenant partition.
+    cmds:
+      - |
+        uv run dagster asset materialize \
+          -m kabuto_kurage.definitions \
+          --partition "{{.TENANT}}" \
+          --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
+
+  ingest:
+    desc: "Ingest GitHub bronze data for one tenant. Usage: task ingest tenant=sandbox max_repositories=1"
+    cmds:
+      - |
+        extra_args=""
+        if [ -n "{{.DATA_ROOT}}" ]; then
+          extra_args="$extra_args --data-root {{.DATA_ROOT}}"
+        fi
+        if [ -n "{{.MAX_REPOSITORIES}}" ]; then
+          extra_args="$extra_args --max-repositories {{.MAX_REPOSITORIES}}"
+        fi
+        uv run python tools/ingest_github_bronze.py --tenant "{{.TENANT}}" $extra_args
+
+  silver:
+    desc: "Build GitHub silver models for one tenant. Usage: task silver tenant=sandbox"
+    cmds:
+      - |
+        extra_args=""
+        if [ -n "{{.DATA_ROOT}}" ]; then
+          extra_args="$extra_args --data-root {{.DATA_ROOT}}"
+        fi
+        uv run python tools/build_github_silver.py --tenant "{{.TENANT}}" $extra_args
+
+  gold:
+    desc: "Build GitHub gold metrics for one tenant. Usage: task gold tenant=sandbox"
+    cmds:
+      - |
+        extra_args=""
+        if [ -n "{{.DATA_ROOT}}" ]; then
+          extra_args="$extra_args --data-root {{.DATA_ROOT}}"
+        fi
+        uv run python tools/build_github_gold.py --tenant "{{.TENANT}}" $extra_args
+
+  observe:
+    desc: "Inspect freshness, row counts, and rate-limit state for one tenant. Usage: task observe tenant=sandbox"
+    cmds:
+      - |
+        extra_args=""
+        if [ -n "{{.DATA_ROOT}}" ]; then
+          extra_args="$extra_args --data-root {{.DATA_ROOT}}"
+        fi
+        uv run python tools/observe_github.py --tenant "{{.TENANT}}" --format "{{.OBSERVE_FORMAT}}" $extra_args
+
+  api:
+    desc: Start the tenant-scoped FastAPI export API.
+    cmds:
+      - uv run uvicorn kabuto_kurage.api.app:app --reload
+
+  mcp:
+    desc: Start the local MCP metrics wrapper over stdio.
+    cmds:
+      - uv run python -m kabuto_kurage.mcp_server

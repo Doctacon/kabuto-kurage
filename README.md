@@ -19,6 +19,7 @@ The repository is currently at the **gold GitHub metrics** milestone:
 - Dagster exposes tenant-partitioned GitHub bronze, silver, and gold metric assets as the first user-facing surface.
 - Gold metrics compute daily PR throughput and PR open-to-merge cycle time into tenant-scoped Delta tables.
 - Lightweight local observability reports row counts, last successful ingestion, freshness/lag, and GitHub rate-limit status from Delta tables and Dagster metadata.
+- Local Infrastructure as Code under `iac/local/` prepares ignored Dagster/data/runtime files with Terraform and provides an optional Docker Compose Dagster service.
 - Secrets and generated local data are ignored by git.
 
 ## Prerequisites
@@ -132,6 +133,24 @@ uv run dagster asset materialize \
   --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 ```
 
+Prepare local runtime files with Terraform:
+
+```bash
+terraform -chdir=iac/local init
+terraform -chdir=iac/local apply
+```
+
+Terraform uses only the local provider to generate ignored local files such as `.local/dagster/dagster.yaml`, `.local/runtime/kabuto.env`, and `.local/data/README.md`. It does not provision cloud, Kubernetes, managed databases, or secrets.
+
+Optionally run Dagster through Docker Compose after Terraform has generated `.local/runtime/kabuto.env`:
+
+```bash
+export GITHUB_TOKEN=... # optional until materializing live GitHub bronze assets
+docker-compose --env-file .local/runtime/kabuto.env -f iac/local/docker-compose.yml up dagster
+```
+
+Docker Compose runs the local service; Terraform prepares local config. Normal tests do not require Docker. If your environment has the newer Docker Compose plugin instead of the standalone command, use `docker compose` with the same arguments.
+
 Run the stack validation proof from the previous milestone:
 
 ```bash
@@ -154,7 +173,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/github-gold-metrics.md` for metric definitions, columns, and limitations. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata. See `docs/observability.md` for local freshness, row-count, last-ingested, and failure-detection signals.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/github-gold-metrics.md` for metric definitions, columns, and limitations. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata. See `docs/observability.md` for local freshness, row-count, last-ingested, and failure-detection signals. See `docs/local-iac.md` for Terraform/Docker Compose local infrastructure boundaries and commands.
 
 ## Project memory
 

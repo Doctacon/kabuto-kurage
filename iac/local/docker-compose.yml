@@ -1,0 +1,25 @@
+# Optional local service runner for the portfolio Dagster UI.
+# Terraform prepares .local/dagster and .local/runtime/kabuto.env; Docker Compose runs the service.
+# This is intentionally local-only and does not define cloud, Kubernetes, or production deployment resources.
+
+services:
+  dagster:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+    working_dir: /workspace
+    env_file:
+      - ../../.local/runtime/kabuto.env
+    environment:
+      # Pass a token from the operator shell if present. Do not put token values in Terraform files.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GH_TOKEN: ${GH_TOKEN:-}
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+    volumes:
+      - ../..:/workspace
+    command:
+      - bash
+      - -lc
+      - |
+        uv sync --frozen
+        mkdir -p "$${DAGSTER_HOME}"
+        uv run dagster dev -h 0.0.0.0 -p 3000 -m kabuto_kurage.definitions

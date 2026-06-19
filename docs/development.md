@@ -19,6 +19,31 @@ uv run ruff check .
 uv run mypy src
 ```
 
+## Local IaC
+
+Terraform prepares ignored local runtime files for Dagster and Delta data roots:
+
+```bash
+terraform -chdir=iac/local init
+terraform -chdir=iac/local apply
+```
+
+Use the generated environment file in a shell:
+
+```bash
+set -a
+source .local/runtime/kabuto.env
+set +a
+```
+
+Optional Docker Compose Dagster service:
+
+```bash
+docker-compose --env-file .local/runtime/kabuto.env -f iac/local/docker-compose.yml up dagster
+```
+
+Terraform manages generated local config/files only. Docker Compose runs the optional local process. Neither path provisions cloud/Kubernetes resources or secrets. Use `docker compose` with the same arguments if your environment has the Compose plugin instead of `docker-compose`. See `docs/local-iac.md`.
+
 ## GitHub bronze ingestion
 
 ```bash

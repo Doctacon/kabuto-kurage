@@ -31,6 +31,12 @@ storage/
 *.sqlite
 *.sqlite3
 
+# Terraform local state/provider cache
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/*.tfplan
+
 # OS/editor noise
 .DS_Store
 .idea/

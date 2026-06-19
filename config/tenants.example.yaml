@@ -3,24 +3,37 @@
 # Copy this file to an ignored local file such as config/tenants.local.yaml and
 # point KABUTO_TENANTS_CONFIG at it when you want to use different GitHub owners,
 # repositories, or environment-variable names. Do not put token values here.
+#
+# The committed defaults model a small portfolio-style demo with explicit repository
+# allowlists. Explicit allowlists keep live demos bounded and make tenant isolation
+# easy to inspect in Dagster, Delta paths, and export APIs.
 
 tenants:
   - tenant_id: personal
-    display_name: Personal GitHub Tenant
+    display_name: Personal Portfolio Repositories
     sources:
       github:
         token_env: GITHUB_TOKEN
         api_base_url: https://api.github.com
-        owners:
-          - crlough
-        repositories: []
+        owners: []
+        repositories:
+          - Doctacon/databox
+          - Doctacon/az-hp
+  - tenant_id: oss_projects
+    display_name: Open Source Project Repositories
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - z3z1ma/pliny
   - tenant_id: sandbox
     display_name: Sandbox Reference Tenant
     sources:
       github:
         token_env: GITHUB_TOKEN
         api_base_url: https://api.github.com
-        owners:
-          - octocat
+        owners: []
         repositories:
           - octocat/Hello-World

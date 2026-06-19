@@ -37,7 +37,7 @@ export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 Run one tenant through the primary Taskfile workflow:
 
 ```bash
-task ingest tenant=sandbox
+task ingest TENANT=sandbox
 ```
 
 Direct script equivalent:
@@ -55,7 +55,7 @@ uv run python tools/ingest_github_bronze.py --all-tenants
 For safe validation against a temporary data root and limited repository count:
 
 ```bash
-task ingest tenant=sandbox data_root=/tmp/kabuto-kurage-validation max_repositories=1
+task ingest TENANT=sandbox DATA_ROOT=/tmp/kabuto-kurage-validation MAX_REPOSITORIES=1
 ```
 
 Direct script equivalent:

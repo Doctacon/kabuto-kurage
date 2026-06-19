@@ -34,7 +34,7 @@ def test_modernized_docs_cover_storage_profiles_dlt_duckdb_and_taskfile() -> Non
         "delta_scan(...) ".strip(),
         "Taskfile",
         "task validate",
-        "task ingest tenant=sandbox",
+        "task ingest TENANT=sandbox",
         "task api",
         "task mcp",
     ]

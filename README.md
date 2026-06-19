@@ -35,7 +35,7 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 
 - **Third-party integration:** real GitHub REST API ingestion using explicit dlt source/resources, with pagination, dlt schema/state artifacts, and rate-limit capture.
 - **Lakehouse layers:** bronze raw payloads, silver typed models, and gold metric tables stored as Delta Lake tables with portable `local`, `minio`, and `r2` storage profile conventions.
-- **Multi-tenancy:** two example tenants, tenant-scoped paths, `tenant_id` columns, and tests that fail closed on cross-tenant contamination.
+- **Multi-tenancy:** three portfolio-style example tenants, tenant-scoped paths, `tenant_id` columns, and tests that fail closed on cross-tenant contamination.
 - **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
 - **Metrics:** daily PR throughput and per-PR open-to-merge cycle time.
 - **Observability:** local freshness/row-count/rate-limit CLI plus Dagster materialization metadata.
@@ -134,6 +134,14 @@ cp .env.example .env
 cp config/tenants.example.yaml config/tenants.local.yaml
 ```
 
+The committed example uses explicit allowlists for three portfolio-style tenant partitions:
+
+| Tenant | Repositories |
+| --- | --- |
+| `personal` | `Doctacon/databox`, `Doctacon/az-hp` |
+| `oss_projects` | `z3z1ma/pliny` |
+| `sandbox` | `octocat/Hello-World` |
+
 Edit `config/tenants.local.yaml` if you want different GitHub owners/repositories. Then export local settings:
 
 ```bash
@@ -142,7 +150,7 @@ export GITHUB_TOKEN=...              # or export GH_TOKEN=...
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
 ```
 
-`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories.
+`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories. It is optional for explicit repository allowlists because the allowlist is already bounded.
 
 ## Run through Dagster UI
 
@@ -177,34 +185,34 @@ See [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md).
 Bronze ingestion uses explicit dlt source/resources for GitHub extraction, records dlt schema/state artifacts, then writes tenant-scoped Delta bronze tables. Use Taskfile first:
 
 ```bash
-task ingest tenant=sandbox max_repositories=1
+task ingest TENANT=sandbox MAX_REPOSITORIES=1
 ```
 
 Silver models:
 
 ```bash
-task silver tenant=sandbox
+task silver TENANT=sandbox
 ```
 
 Gold metrics:
 
 ```bash
-task gold tenant=sandbox
+task gold TENANT=sandbox
 ```
 
 Inspect local operational state:
 
 ```bash
-task observe tenant=sandbox
+task observe TENANT=sandbox
 ```
 
 For isolated validation, pass the same temporary data root to all commands:
 
 ```bash
-task ingest tenant=sandbox data_root=/tmp/kabuto-demo max_repositories=1
-task silver tenant=sandbox data_root=/tmp/kabuto-demo
-task gold tenant=sandbox data_root=/tmp/kabuto-demo
-task observe tenant=sandbox data_root=/tmp/kabuto-demo
+task ingest TENANT=sandbox DATA_ROOT=/tmp/kabuto-demo MAX_REPOSITORIES=1
+task silver TENANT=sandbox DATA_ROOT=/tmp/kabuto-demo
+task gold TENANT=sandbox DATA_ROOT=/tmp/kabuto-demo
+task observe TENANT=sandbox DATA_ROOT=/tmp/kabuto-demo
 ```
 
 The underlying Python scripts in `tools/` remain available as implementation entrypoints when direct invocation is useful.

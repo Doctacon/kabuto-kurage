@@ -119,13 +119,13 @@ export GITHUB_TOKEN=...
 Then run bounded dlt-native bronze ingestion through Taskfile. The ingestion path uses dlt source/resources, records dlt schema/state artifacts, and preserves tenant-scoped bronze Delta tables:
 
 ```bash
-task ingest tenant=sandbox max_repositories=1
+task ingest TENANT=sandbox MAX_REPOSITORIES=1
 ```
 
 For a bounded validation run that does not write to the default local data root:
 
 ```bash
-task ingest tenant=sandbox data_root=/tmp/kabuto-kurage-validation max_repositories=1
+task ingest TENANT=sandbox DATA_ROOT=/tmp/kabuto-kurage-validation MAX_REPOSITORIES=1
 ```
 
 Underlying script, still available when needed:
@@ -139,13 +139,13 @@ uv run python tools/ingest_github_bronze.py --tenant sandbox --max-repositories 
 After bronze ingestion has produced tenant-scoped Delta tables:
 
 ```bash
-task silver tenant=sandbox
+task silver TENANT=sandbox
 ```
 
 For temporary validation data roots, use the same `data_root` used for bronze ingestion:
 
 ```bash
-task silver tenant=sandbox data_root=/tmp/kabuto-kurage-validation
+task silver TENANT=sandbox DATA_ROOT=/tmp/kabuto-kurage-validation
 ```
 
 Underlying script:
@@ -159,13 +159,13 @@ uv run python tools/build_github_silver.py --tenant sandbox
 After silver models exist:
 
 ```bash
-task gold tenant=sandbox
+task gold TENANT=sandbox
 ```
 
 For temporary validation data roots, use the same `data_root` used for bronze and silver:
 
 ```bash
-task gold tenant=sandbox data_root=/tmp/kabuto-kurage-validation
+task gold TENANT=sandbox DATA_ROOT=/tmp/kabuto-kurage-validation
 ```
 
 Underlying script:
@@ -179,13 +179,13 @@ uv run python tools/build_github_gold.py --tenant sandbox
 After bronze/silver/gold tables exist, inspect local freshness, row counts, last-ingested state, and rate-limit status:
 
 ```bash
-task observe tenant=sandbox
+task observe TENANT=sandbox
 ```
 
 Use the same `data_root` as ingestion/transformation commands when inspecting temporary validation data:
 
 ```bash
-task observe tenant=sandbox data_root=/tmp/kabuto-kurage-validation
+task observe TENANT=sandbox DATA_ROOT=/tmp/kabuto-kurage-validation
 ```
 
 Underlying script:
@@ -229,7 +229,7 @@ CLI materialization equivalent through Taskfile:
 
 ```bash
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
-task materialize tenant=sandbox
+task materialize TENANT=sandbox
 ```
 
 Dagster materializations include local operational metadata such as `observed_row_count`, `freshness_status`, `freshness_lag_hours`, `latest_successful_ingestion_at`, `latest_ingestion_run_id`, and bronze rate-limit fields.

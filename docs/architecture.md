@@ -294,7 +294,7 @@ Useful files:
 Local observability is intentionally lightweight and inspectable. Taskfile is the preferred command surface:
 
 ```bash
-task observe tenant=sandbox
+task observe TENANT=sandbox
 ```
 
 Direct command equivalent:
@@ -328,10 +328,10 @@ entrypoints. Common tasks include:
 task setup
 task validate
 task dagster
-task ingest tenant=sandbox max_repositories=1
-task silver tenant=sandbox
-task gold tenant=sandbox
-task observe tenant=sandbox
+task ingest TENANT=sandbox MAX_REPOSITORIES=1
+task silver TENANT=sandbox
+task gold TENANT=sandbox
+task observe TENANT=sandbox
 task api
 task mcp
 ```

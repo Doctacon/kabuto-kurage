@@ -32,7 +32,7 @@ Each asset is statically partitioned by configured `tenant_id`. The partition se
 - `KABUTO_TENANTS_CONFIG` if set.
 - Otherwise `config/tenants.example.yaml`.
 
-Restart Dagster after changing tenant config so the partition list refreshes.
+The committed example partitions are `oss_projects`, `personal`, and `sandbox`. Restart Dagster after changing tenant config so the partition list refreshes.
 
 ## Start Dagster UI
 
@@ -48,7 +48,7 @@ Or use the Taskfile wrapper, which resolves the default Dagster home to an absol
 task dagster
 ```
 
-Open the URL printed by Dagster, select a tenant partition such as `sandbox`, and materialize the GitHub assets. Set `GITHUB_TOKEN` or `GH_TOKEN` before materializing bronze assets against the live GitHub API. If neither token nor fixture mode is configured, `task dagster` prints a warning before launching the UI because bronze materialization will fail without one of those inputs.
+Open the URL printed by Dagster, select a tenant partition such as `personal`, `oss_projects`, or `sandbox`, and materialize the GitHub assets. Set `GITHUB_TOKEN` or `GH_TOKEN` before materializing bronze assets against the live GitHub API. If neither token nor fixture mode is configured, `task dagster` prints a warning before launching the UI because bronze materialization will fail without one of those inputs.
 
 For deterministic no-token demos and smoke tests, start Dagster with fixture mode:
 

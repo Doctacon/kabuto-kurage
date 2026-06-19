@@ -21,19 +21,28 @@ export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 
 `config/tenants.local.yaml` is ignored by git so local owner/repository choices do not have to be committed.
 
+The committed default models three portfolio-style tenant partitions:
+
+| Tenant | Purpose | Repositories |
+| --- | --- | --- |
+| `personal` | Chris's portfolio repositories | `Doctacon/databox`, `Doctacon/az-hp` |
+| `oss_projects` | Friend/open-source reference repository | `z3z1ma/pliny` |
+| `sandbox` | Safe public GitHub fixture | `octocat/Hello-World` |
+
 The registry shape is:
 
 ```yaml
 tenants:
   - tenant_id: personal
-    display_name: Personal GitHub Tenant
+    display_name: Personal Portfolio Repositories
     sources:
       github:
         token_env: GITHUB_TOKEN
         api_base_url: https://api.github.com
-        owners:
-          - crlough
-        repositories: []
+        owners: []
+        repositories:
+          - Doctacon/databox
+          - Doctacon/az-hp
 ```
 
 Rules:

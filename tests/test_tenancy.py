@@ -20,11 +20,17 @@ def write_config(tmp_path: Path, body: str) -> Path:
     return path
 
 
-def test_default_registry_has_two_github_tenants() -> None:
+def test_default_registry_has_portfolio_github_tenants() -> None:
     registry = load_tenant_registry()
 
-    assert registry.tenant_ids == ("personal", "sandbox")
+    assert registry.tenant_ids == ("oss_projects", "personal", "sandbox")
     assert registry.get("personal").github.token_env == "GITHUB_TOKEN"
+    assert registry.get("personal").github.owners == ()
+    assert registry.get("personal").github.repositories == (
+        "Doctacon/databox",
+        "Doctacon/az-hp",
+    )
+    assert registry.get("oss_projects").github.repositories == ("z3z1ma/pliny",)
     assert registry.get("sandbox").github.repositories == ("octocat/Hello-World",)
 
 

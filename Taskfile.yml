@@ -5,21 +5,21 @@ version: '3'
 #
 # Usage examples:
 #   task validate
-#   task ingest tenant=sandbox
-#   task silver tenant=sandbox
-#   task gold tenant=sandbox
-#   task observe tenant=sandbox
+#   task ingest TENANT=sandbox
+#   task silver TENANT=sandbox
+#   task gold TENANT=sandbox
+#   task observe TENANT=sandbox
 #
 # Secrets such as GITHUB_TOKEN, GH_TOKEN, and R2 credentials are read from the
 # environment by the underlying tools. These tasks intentionally do not print or
 # interpolate secret values.
 
 vars:
-  TENANT: '{{.tenant | default "sandbox"}}'
-  DATA_ROOT: '{{.data_root | default ""}}'
-  MAX_REPOSITORIES: '{{.max_repositories | default ""}}'
-  OBSERVE_FORMAT: '{{.format | default "table"}}'
-  DAGSTER_HOME: '{{.dagster_home | default ".local/dagster"}}'
+  TENANT: '{{.TENANT | default "sandbox"}}'
+  DATA_ROOT: '{{.DATA_ROOT | default ""}}'
+  MAX_REPOSITORIES: '{{.MAX_REPOSITORIES | default ""}}'
+  OBSERVE_FORMAT: '{{.OBSERVE_FORMAT | default "table"}}'
+  DAGSTER_HOME: '{{.DAGSTER_HOME | default ".local/dagster"}}'
 
 tasks:
   default:
@@ -95,7 +95,7 @@ tasks:
           --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 
   ingest:
-    desc: "Ingest GitHub bronze data for one tenant. Usage: task ingest tenant=sandbox max_repositories=1"
+    desc: "Ingest GitHub bronze data for one tenant. Usage: task ingest TENANT=sandbox MAX_REPOSITORIES=1"
     cmds:
       - |
         extra_args=""
@@ -108,7 +108,7 @@ tasks:
         uv run python tools/ingest_github_bronze.py --tenant "{{.TENANT}}" $extra_args
 
   silver:
-    desc: "Build GitHub silver models for one tenant. Usage: task silver tenant=sandbox"
+    desc: "Build GitHub silver models for one tenant. Usage: task silver TENANT=sandbox"
     cmds:
       - |
         extra_args=""
@@ -118,7 +118,7 @@ tasks:
         uv run python tools/build_github_silver.py --tenant "{{.TENANT}}" $extra_args
 
   gold:
-    desc: "Build GitHub gold metrics for one tenant. Usage: task gold tenant=sandbox"
+    desc: "Build GitHub gold metrics for one tenant. Usage: task gold TENANT=sandbox"
     cmds:
       - |
         extra_args=""
@@ -128,7 +128,7 @@ tasks:
         uv run python tools/build_github_gold.py --tenant "{{.TENANT}}" $extra_args
 
   observe:
-    desc: "Inspect freshness, row counts, and rate-limit state for one tenant. Usage: task observe tenant=sandbox"
+    desc: "Inspect freshness, row counts, and rate-limit state for one tenant. Usage: task observe TENANT=sandbox"
     cmds:
       - |
         extra_args=""

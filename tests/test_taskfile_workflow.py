@@ -76,7 +76,7 @@ def test_taskfile_supports_tenant_parameterized_pipeline_tasks() -> None:
     commands = all_task_commands(taskfile)
 
     assert "TENANT" in taskfile["vars"]
-    assert "{{.tenant | default \"sandbox\"}}" == taskfile["vars"]["TENANT"]
+    assert "{{.TENANT | default \"sandbox\"}}" == taskfile["vars"]["TENANT"]
     for task_name in ["ingest", "silver", "gold", "observe", "materialize"]:
         assert "{{.TENANT}}" in "\n".join(task_commands(taskfile["tasks"][task_name]))
 
@@ -128,7 +128,7 @@ def test_docs_teach_taskfile_as_primary_workflow_and_scripts_remain() -> None:
         "Taskfile is the primary human-facing command surface",
         "task setup",
         "task validate",
-        "task ingest tenant=sandbox",
+        "task ingest TENANT=sandbox",
         "task api",
         "task mcp",
         "Python scripts in `tools/` remain available",

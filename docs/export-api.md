@@ -32,7 +32,7 @@ task setup
 export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 export GITHUB_TOKEN=...              # or GH_TOKEN; needed only for live GitHub ingestion
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
-task materialize tenant=sandbox
+task materialize TENANT=sandbox
 ```
 
 Then configure a local API token and start the REST API:

@@ -86,6 +86,7 @@ def test_definitions_expose_partitioned_github_assets_through_gold_metrics() -> 
     ]
     assert specs["github_bronze_repositories"].partitions_def is not None
     assert specs["github_bronze_repositories"].partitions_def.get_partition_keys() == (
+        "oss_projects",
         "personal",
         "sandbox",
     )

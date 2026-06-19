@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: none
@@ -19,49 +19,49 @@ This parent ticket is an orchestration plan. Child tickets are the executable un
 The project has two clear operating modes:
 
 1. **Small default mode** using `config/tenants.example.yaml` for quick development and deterministic tests.
-2. **Portfolio-scale mode** using `config/tenants.scale.yaml` with roughly 20-30 tenants and 45-60 public repositories across at least 24 owners/orgs, with first-run history bounded to 180 days.
+2. **Portfolio-scale mode** using `config/tenants.scale.yaml` with 25 tenants and 50 public repositories across 42 owners/orgs, with first-run history bounded to 180 days.
 
-## Child Tickets and Sequencing
+## Child Tickets and Status
 
 ### 1. Curate scale repository corpus
 
 Ticket: `.loom/tickets/2026-06-19-curate-github-scale-repository-corpus.md`
 
-Purpose: produce the candidate list of tenants/repos and evidence that the list is accessible, relevant, and not pathological.
+Status: done.
 
-This should run first because implementation depends on the shape and size of the corpus.
+Produced 25 tenant IDs, 50 repositories, 42 distinct owners/orgs, and metadata/access evidence for every repository.
 
 ### 2. Add initial lookback support
 
 Ticket: `.loom/tickets/2026-06-19-add-github-initial-lookback-window.md`
 
-Purpose: support `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180` or equivalent so first scale runs do not crawl all historical PRs.
+Status: done.
 
-Can run in parallel with corpus curation after the spec is understood, but should be completed before full live scale materialization.
+Added `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180` behavior and deterministic tests proving first-run page limiting.
 
 ### 3. Add scale tenant config and deterministic validation
 
 Ticket: `.loom/tickets/2026-06-19-add-github-scale-tenant-config.md`
 
-Purpose: add `config/tenants.scale.yaml` and tests that validate shape, repo counts, owner counts, tenant ID safety, and lack of secrets.
+Status: done.
 
-Depends on the curated repository corpus.
+Added `config/tenants.scale.yaml` and deterministic shape tests.
 
 ### 4. Add scale workflow documentation and Taskfile ergonomics
 
 Ticket: `.loom/tickets/2026-06-19-document-github-scale-workflow.md`
 
-Purpose: make small default versus scale mode obvious, including safe commands, env vars, and staged validation workflow.
+Status: done.
 
-Depends on initial lookback support and scale config naming.
+Added docs and Taskfile aliases `materialize-scale` and `observe-scale`.
 
 ### 5. Validate staged scale runs and record evidence
 
 Ticket: `.loom/tickets/2026-06-19-validate-github-scale-demo.md`
 
-Purpose: run safe live validation with the Proton Pass PAT, first as repository accessibility checks, then a small subset of scale tenants, and optionally a full scale materialization if explicitly chosen.
+Status: done.
 
-Depends on all previous child tickets.
+Validated all repos through metadata checks and live materialized representative tenants `oss_ingestion` and `oss_api_frameworks`.
 
 ## Acceptance Criteria
 
@@ -72,10 +72,20 @@ Depends on all previous child tickets.
 - Docs explain how to run scale mode safely.
 - Evidence records what was live-validated and what remains optional.
 
+## Current State
+
+Done. All child tickets are closed with evidence.
+
 ## Progress and Notes
 
 - 2026-06-19: Plan created from user direction: many tenants, mix OSS stack and engineering orgs, 180-day first-run bound, small default remains default.
+- 2026-06-19: Drained all runnable child tickets in dependency order.
+- 2026-06-19: Full deterministic validation passed: `uv run ruff check .`, `uv run mypy src`, `uv run pytest`.
+
+## Results
+
+Acceptance criteria satisfied.
 
 ## Blockers
 
-None. Repo corpus curation is the first executable unit.
+None.

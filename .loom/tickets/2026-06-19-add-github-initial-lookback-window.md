@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-19-plan-github-portfolio-scale-demo.md
@@ -12,9 +12,9 @@ Add support for bounding the first pull-request ingestion run for a tenant/repos
 
 Current incremental behavior avoids full rescans after cursor state exists, but the first run can still crawl all historical PRs. Scale mode needs an initial 180-day bound so the first materialization of ~50 repositories remains safe.
 
-## Proposed Interface
+## Interface
 
-Add an environment variable such as:
+Added:
 
 ```bash
 KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180
@@ -22,10 +22,10 @@ KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180
 
 Behavior:
 
-- If no cursor exists for a repository and the env var is set, fetch PR pages sorted by `updated_at desc` and stop once page data falls before `now - lookback_days`.
+- If no cursor exists for a repository and the env var is set, fetch PR pages sorted by `updated_at desc` and stop once page data falls before `fetched_at - lookback_days`.
 - If a cursor exists, keep using the existing incremental cursor plus `KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS` safety window.
-- If the env var is unset, preserve existing behavior for small/default workflows unless a conscious default is chosen in docs/tasks for scale mode.
-- Fixture mode should remain deterministic and should not depend on wall-clock lookback behavior.
+- If the env var is unset, preserve existing behavior for small/default workflows.
+- Fixture mode remains deterministic and does not depend on wall-clock lookback behavior.
 
 ## Acceptance Criteria
 
@@ -36,9 +36,21 @@ Behavior:
 - Docs mention that scale mode should use `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180`.
 - Validation passes: `uv run pytest`, `uv run ruff check .`, `uv run mypy src`.
 
+## Current State
+
+Done. Evidence recorded in `.loom/evidence/2026-06-19-github-initial-lookback-validation.md`.
+
 ## Progress and Notes
 
 - 2026-06-19: Opened as child ticket for portfolio-scale demo planning.
+- 2026-06-19: Set active and implemented `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS` in `src/kabuto_kurage/ingestion/github_bronze.py`.
+- 2026-06-19: Added deterministic test coverage proving a first-run lookback filters older PRs and avoids fetching linked older pages.
+- 2026-06-19: Updated `.env.example`, `README.md`, and `docs/github-bronze-ingestion.md` with the new env var.
+- 2026-06-19: Ran targeted tests, ruff, and mypy; all passed.
+
+## Results
+
+Acceptance criteria satisfied.
 
 ## Blockers
 

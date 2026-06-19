@@ -1,0 +1,251 @@
+tenants:
+  - tenant_id: oss_analytics_engines
+    display_name: OSS Analytics Engines
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - duckdb/duckdb
+          - ClickHouse/ClickHouse
+  - tenant_id: oss_api_frameworks
+    display_name: OSS Api Frameworks
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - fastapi/fastapi
+          - pallets/flask
+  - tenant_id: oss_asgi_stack
+    display_name: OSS Asgi Stack
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - encode/starlette
+          - encode/uvicorn
+  - tenant_id: oss_ci_cd
+    display_name: OSS Ci Cd
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - jenkinsci/jenkins
+          - go-task/task
+  - tenant_id: oss_columnar
+    display_name: OSS Columnar
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - apache/arrow
+          - pola-rs/polars
+  - tenant_id: oss_data_apps
+    display_name: OSS Data Apps
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - apache/superset
+          - metabase/metabase
+  - tenant_id: oss_datastores
+    display_name: OSS Datastores
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - redis/redis
+          - timescale/timescaledb
+  - tenant_id: oss_delivery
+    display_name: OSS Delivery
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - argoproj/argo-cd
+          - fluxcd/flux2
+  - tenant_id: oss_developer_tools
+    display_name: OSS Developer Tools
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - jupyterlab/jupyterlab
+          - mkdocs/mkdocs
+  - tenant_id: oss_frontend_platforms
+    display_name: OSS Frontend Platforms
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - vitejs/vite
+          - vercel/next.js
+  - tenant_id: oss_iac
+    display_name: OSS Iac
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - hashicorp/terraform
+          - pulumi/pulumi
+  - tenant_id: oss_ingestion
+    display_name: OSS Ingestion
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - dlt-hub/dlt
+          - meltano/meltano
+  - tenant_id: oss_kubernetes_tooling
+    display_name: OSS Kubernetes Tooling
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - kubernetes-sigs/kind
+          - helm/helm
+  - tenant_id: oss_lakehouse
+    display_name: OSS Lakehouse
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - delta-io/delta-rs
+          - apache/iceberg
+  - tenant_id: oss_languages
+    display_name: OSS Languages
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - python/cpython
+          - rust-lang/rust
+  - tenant_id: oss_ml_apps
+    display_name: OSS Ml Apps
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - mlflow/mlflow
+          - streamlit/streamlit
+  - tenant_id: oss_observability
+    display_name: OSS Observability
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - grafana/grafana
+          - prometheus/prometheus
+  - tenant_id: oss_orchestration
+    display_name: OSS Orchestration
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - dagster-io/dagster
+          - apache/airflow
+  - tenant_id: oss_python_data
+    display_name: OSS Python Data
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - pandas-dev/pandas
+          - numpy/numpy
+  - tenant_id: oss_streaming
+    display_name: OSS Streaming
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - apache/kafka
+          - apache/flink
+  - tenant_id: oss_task_queues
+    display_name: OSS Task Queues
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - celery/celery
+          - temporalio/temporal
+  - tenant_id: oss_telemetry
+    display_name: OSS Telemetry
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - open-telemetry/opentelemetry-collector
+          - open-telemetry/opentelemetry-python
+  - tenant_id: oss_transformation
+    display_name: OSS Transformation
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - dbt-labs/dbt-core
+          - sqlalchemy/sqlalchemy
+  - tenant_id: oss_validation_clients
+    display_name: OSS Validation Clients
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - pydantic/pydantic
+          - encode/httpx
+  - tenant_id: oss_vector_data
+    display_name: OSS Vector Data
+    sources:
+      github:
+        token_env: GITHUB_TOKEN
+        api_base_url: https://api.github.com
+        owners: []
+        repositories:
+          - qdrant/qdrant
+          - chroma-core/chroma

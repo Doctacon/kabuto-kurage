@@ -158,11 +158,12 @@ Bronze writes are still tenant-scoped snapshots, but pull-request extraction now
 Controls:
 
 ```bash
-export KABUTO_GITHUB_INCREMENTAL_ENABLED=true      # default
-export KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS=1  # default safety window
+export KABUTO_GITHUB_INCREMENTAL_ENABLED=true       # default
+export KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS=1   # default safety window after cursor state exists
+export KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180     # optional first-run bound for scale demos
 ```
 
-Set `KABUTO_GITHUB_INCREMENTAL_ENABLED=false` to force full pull-request scans for debugging.
+Set `KABUTO_GITHUB_INCREMENTAL_ENABLED=false` to force full pull-request scans for debugging. Leave `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS` unset when you intentionally want a full first historical scan; set it to `180` for portfolio-scale runs with `config/tenants.scale.yaml`.
 
 ## Fixture Mode for Dagster Smoke Tests
 

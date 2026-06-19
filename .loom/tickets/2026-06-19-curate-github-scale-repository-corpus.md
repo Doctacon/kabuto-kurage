@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-19-plan-github-portfolio-scale-demo.md
@@ -26,6 +26,51 @@ Include a curated mix from areas such as:
 
 Avoid repos that are likely to dominate API usage or runtime without adding portfolio value.
 
+## Current State
+
+Done. A YAML-ready portfolio-scale corpus has been curated and recorded in `.loom/evidence/2026-06-19-github-scale-corpus-curation.md`.
+
+Summary:
+
+- Tenant partitions: 25
+- Repositories: 50
+- Distinct owners/orgs: 42
+- Metadata/access errors: 0
+- Private/archived/disabled accepted repos: 0
+- Final observed GitHub core rate-limit remaining after checks: 4948 of 5000
+
+The exact YAML-ready tenant/repository list is in the evidence record under `## YAML-Ready Tenant/Repository List`.
+
+## Proposed Tenant Summary
+
+| Tenant | Repositories |
+| --- | --- |
+| `oss_analytics_engines` | `duckdb/duckdb`, `ClickHouse/ClickHouse` |
+| `oss_api_frameworks` | `fastapi/fastapi`, `pallets/flask` |
+| `oss_asgi_stack` | `encode/starlette`, `encode/uvicorn` |
+| `oss_ci_cd` | `jenkinsci/jenkins`, `go-task/task` |
+| `oss_columnar` | `apache/arrow`, `pola-rs/polars` |
+| `oss_data_apps` | `apache/superset`, `metabase/metabase` |
+| `oss_datastores` | `redis/redis`, `timescale/timescaledb` |
+| `oss_delivery` | `argoproj/argo-cd`, `fluxcd/flux2` |
+| `oss_developer_tools` | `jupyterlab/jupyterlab`, `mkdocs/mkdocs` |
+| `oss_frontend_platforms` | `vitejs/vite`, `vercel/next.js` |
+| `oss_iac` | `hashicorp/terraform`, `pulumi/pulumi` |
+| `oss_ingestion` | `dlt-hub/dlt`, `meltano/meltano` |
+| `oss_kubernetes_tooling` | `kubernetes-sigs/kind`, `helm/helm` |
+| `oss_lakehouse` | `delta-io/delta-rs`, `apache/iceberg` |
+| `oss_languages` | `python/cpython`, `rust-lang/rust` |
+| `oss_ml_apps` | `mlflow/mlflow`, `streamlit/streamlit` |
+| `oss_observability` | `grafana/grafana`, `prometheus/prometheus` |
+| `oss_orchestration` | `dagster-io/dagster`, `apache/airflow` |
+| `oss_python_data` | `pandas-dev/pandas`, `numpy/numpy` |
+| `oss_streaming` | `apache/kafka`, `apache/flink` |
+| `oss_task_queues` | `celery/celery`, `temporalio/temporal` |
+| `oss_telemetry` | `open-telemetry/opentelemetry-collector`, `open-telemetry/opentelemetry-python` |
+| `oss_transformation` | `dbt-labs/dbt-core`, `sqlalchemy/sqlalchemy` |
+| `oss_validation_clients` | `pydantic/pydantic`, `encode/httpx` |
+| `oss_vector_data` | `qdrant/qdrant`, `chroma-core/chroma` |
+
 ## Acceptance Criteria
 
 - Proposed corpus contains 20-30 tenant IDs and 45-60 `owner/repo` entries.
@@ -39,6 +84,23 @@ Avoid repos that are likely to dominate API usage or runtime without adding port
 ## Progress and Notes
 
 - 2026-06-19: Opened as first child of the portfolio-scale plan.
+- 2026-06-19: Set active and began corpus curation against `.loom/specs/github-portfolio-scale-demo.md` and `.loom/decisions/github-scale-demo-many-tenant-opt-in.md`.
+- 2026-06-19: Selected a 25-tenant / 50-repository candidate corpus mixing data/orchestration stack projects and broader engineering org projects.
+- 2026-06-19: Used the Proton Pass item `GitHub API Token`, field `API Key`, only as a local bearer token for GitHub metadata and PR sample checks. The token was not printed or recorded.
+- 2026-06-19: Recorded metadata evidence in `.loom/evidence/2026-06-19-github-scale-corpus-curation.md`.
+- 2026-06-19: Closed as done because all acceptance criteria are met.
+
+## Results
+
+Acceptance criteria satisfied:
+
+- Corpus has 25 tenant IDs, which is within the 20-30 target.
+- Corpus has 50 repositories, which is within the 45-60 target.
+- Corpus has 42 distinct owners/orgs, exceeding the 24-owner target.
+- Every proposed repository returned HTTP 200 for GitHub metadata and pull-request sample endpoints.
+- Evidence captured non-secret metadata for every repo: status, private/archive/disabled flags, default branch, open issue count, stars, repo updated/pushed timestamps, latest sampled PR updated timestamp, and recent sampled PR count in the 180-day window.
+- No repositories were deferred after checks; all accepted repos were public, reachable, not archived, not disabled, and recently active in the sampled PR endpoint.
+- Exact YAML-ready list is present in `.loom/evidence/2026-06-19-github-scale-corpus-curation.md`.
 
 ## Blockers
 

@@ -331,6 +331,63 @@ def test_ingest_tenant_github_to_bronze_writes_idempotent_delta_tables(
     assert request_counts["/repos/octocat/Hello-World/pulls"] == 2
 
 
+def test_initial_lookback_limits_first_pull_request_scan(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("KABUTO_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS", "180")
+    request_counts: dict[str, int] = {}
+
+    def handler(request: PreparedRequest) -> requests.Response:
+        path = request.path_url.split("?", 1)[0]
+        request_counts[path] = request_counts.get(path, 0) + 1
+        if path == "/users/octocat/repos":
+            return response(request, [], remaining="4999")
+        if path == "/repos/octocat/Hello-World":
+            return response(request, repository_payload("octocat/Hello-World"), remaining="4998")
+        if path == "/repos/octocat/Hello-World/pulls" and request_counts[path] == 1:
+            return response(
+                request,
+                [
+                    pull_request_payload(
+                        "octocat/Hello-World",
+                        pull_request_id=1,
+                        number=1,
+                        updated_at="2026-06-01T00:00:00Z",
+                    ),
+                    pull_request_payload(
+                        "octocat/Hello-World",
+                        pull_request_id=2,
+                        number=2,
+                        updated_at="2025-01-01T00:00:00Z",
+                    ),
+                ],
+                link='<https://api.github.test/repos/octocat/Hello-World/pulls?page=2>; rel="next"',
+                remaining="4997",
+            )
+        if path == "/repos/octocat/Hello-World/pulls" and request_counts[path] > 1:
+            raise AssertionError("initial lookback should stop before fetching page 2")
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    session = github_session(handler)
+    try:
+        client = GitHubRestClient(
+            api_base_url="https://api.github.test", token="fake-token", session=session
+        )
+        ingest_tenant_github_to_bronze(
+            tenant_config(),
+            token="fake-token",
+            ingestion_run_id="run-lookback",
+            fetched_at=FETCHED_AT,
+            client=client,
+        )
+    finally:
+        session.close()
+
+    pull_requests_path = delta_table_path("sandbox", "bronze", "github", "pull_requests")
+    pull_request_rows = DeltaTable(str(pull_requests_path)).to_pyarrow_table().to_pylist()
+    assert [json.loads(row["payload_json"])["number"] for row in pull_request_rows] == [1]
+    assert request_counts["/repos/octocat/Hello-World/pulls"] == 1
+
+
 def test_incremental_pull_request_sync_preserves_existing_bronze_rows(
     monkeypatch, tmp_path: Path
 ) -> None:

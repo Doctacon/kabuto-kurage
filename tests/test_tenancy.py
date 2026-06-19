@@ -41,6 +41,26 @@ def test_tenant_config_path_can_be_overridden(monkeypatch, tmp_path: Path) -> No
     assert tenant_config_path() == configured.resolve()
 
 
+def test_scale_registry_is_opt_in_and_has_portfolio_scale_shape() -> None:
+    scale_path = PROJECT_ROOT / "config" / "tenants.scale.yaml"
+    registry = load_tenant_registry(scale_path)
+    repositories = [
+        repository
+        for tenant in registry.tenants.values()
+        for repository in tenant.github.repositories
+    ]
+    owners = {repository.split("/", 1)[0] for repository in repositories}
+
+    assert tenant_config_path() == PROJECT_ROOT / "config" / "tenants.example.yaml"
+    assert 20 <= len(registry.tenant_ids) <= 30
+    assert 45 <= len(repositories) <= 60
+    assert len(owners) >= 24
+    assert len(set(repositories)) == len(repositories)
+    assert all(not tenant.github.owners for tenant in registry.tenants.values())
+    assert all(tenant.github.token_env == "GITHUB_TOKEN" for tenant in registry.tenants.values())
+    assert all(not repository.startswith(("ghp_", "github_pat_")) for repository in repositories)
+
+
 def test_tenant_id_validation_rejects_missing_or_path_unsafe_values() -> None:
     assert validate_tenant_id("tenant_123") == "tenant_123"
 

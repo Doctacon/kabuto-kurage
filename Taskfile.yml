@@ -94,6 +94,21 @@ tasks:
           --partition "{{.TENANT}}" \
           --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 
+  materialize-scale:
+    desc: Materialize one tenant from the opt-in scale config with a 180-day first-run bound.
+    cmds:
+      - |
+        KABUTO_TENANTS_CONFIG="${KABUTO_TENANTS_CONFIG:-config/tenants.scale.yaml}" \
+        KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS="${KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS:-180}" \
+          task materialize TENANT="{{.TENANT}}"
+
+  observe-scale:
+    desc: Observe one tenant from the opt-in scale config.
+    cmds:
+      - |
+        KABUTO_TENANTS_CONFIG="${KABUTO_TENANTS_CONFIG:-config/tenants.scale.yaml}" \
+          task observe TENANT="{{.TENANT}}" OBSERVE_FORMAT="{{.OBSERVE_FORMAT}}"
+
   ingest:
     desc: "Ingest GitHub bronze data for one tenant. Usage: task ingest TENANT=sandbox MAX_REPOSITORIES=1"
     cmds:

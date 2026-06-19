@@ -153,7 +153,27 @@ export KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS=1
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
 ```
 
-`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories. It is optional for explicit repository allowlists because the allowlist is already bounded. Incremental PR sync is enabled by default: after the first full tenant run, cursor state under `.local/data/dlt/github/{tenant_id}/incremental_state.json` lets later runs fetch only recently updated pull requests with a lookback safety window.
+`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories. It is optional for explicit repository allowlists because the allowlist is already bounded. Incremental PR sync is enabled by default: cursor state under `.local/data/dlt/github/{tenant_id}/incremental_state.json` lets later runs fetch only recently updated pull requests with a lookback safety window. For portfolio-scale first runs, set `KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180` so a new tenant does not crawl all historical PRs.
+
+## Opt-in portfolio-scale GitHub demo
+
+The default tenant config stays intentionally small for quick local development. To exercise a more serious data shape, use the opt-in scale registry:
+
+```bash
+export KABUTO_TENANTS_CONFIG=config/tenants.scale.yaml
+export KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180
+```
+
+`config/tenants.scale.yaml` contains 25 tenant partitions and 50 public repositories across 42 owners/orgs. It is meant to make tenant partitions, backfills, asset checks, incremental sync, and observability feel warranted without pretending to match a 700-customer production system.
+
+Run one scale tenant first:
+
+```bash
+task materialize-scale TENANT=oss_orchestration
+task observe-scale TENANT=oss_orchestration
+```
+
+Only run broader scale materialization when you intentionally want to spend the GitHub API/time budget. Later runs use persisted incremental cursor state.
 
 ## Run through Dagster UI
 

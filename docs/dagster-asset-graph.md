@@ -38,7 +38,7 @@ Each asset is statically partitioned by configured `tenant_id`. The partition se
 - `KABUTO_TENANTS_CONFIG` if set.
 - Otherwise `config/tenants.example.yaml`.
 
-The committed example partitions are `oss_projects`, `personal`, and `sandbox`. Restart Dagster after changing tenant config so the partition list refreshes.
+The committed default example partitions are `oss_projects`, `personal`, and `sandbox`. For portfolio-scale runs, set `KABUTO_TENANTS_CONFIG=config/tenants.scale.yaml` before starting Dagster; that opt-in config exposes 25 tenant partitions and 50 repositories. Restart Dagster after changing tenant config so the partition list refreshes.
 
 ## Start Dagster UI
 

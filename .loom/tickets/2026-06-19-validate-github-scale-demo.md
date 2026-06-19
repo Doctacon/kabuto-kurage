@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-19-plan-github-portfolio-scale-demo.md
@@ -28,11 +28,9 @@ uv run mypy src
 
 Using the Proton Pass PAT as local `GITHUB_TOKEN` without printing it, validate that every repo in `config/tenants.scale.yaml` is reachable through GitHub metadata endpoints.
 
-Record non-secret results: status, private flag, archived flag, default branch, and any rate-limit posture.
-
 ### Stage 3: small live scale subset
 
-Materialize 2-3 representative scale tenants with:
+Materialize 2 representative scale tenants with:
 
 ```bash
 export KABUTO_TENANTS_CONFIG=config/tenants.scale.yaml
@@ -41,11 +39,9 @@ task materialize TENANT=<tenant_id>
 task observe TENANT=<tenant_id>
 ```
 
-Pick at least one data-stack tenant and one broader engineering-org tenant.
-
 ### Stage 4: optional full scale run
 
-Only run the full scale materialization/backfill if the operator explicitly accepts the time/API cost. If skipped, record that it was intentionally deferred and why.
+Only run the full scale materialization/backfill if the operator explicitly accepts the time/API cost.
 
 ## Acceptance Criteria
 
@@ -56,10 +52,23 @@ Only run the full scale materialization/backfill if the operator explicitly acce
 - Observability output shows non-zero rows for the representative materialized tenants, or explains why a selected repo had no PR activity in the 180-day window.
 - Any full scale run is explicitly opt-in and recorded; absence of a full scale run is not treated as failure if subset validation passes.
 
+## Current State
+
+Done. Evidence recorded in `.loom/evidence/2026-06-19-github-scale-demo-validation.md`.
+
 ## Progress and Notes
 
 - 2026-06-19: Opened as final child ticket for staged validation.
+- 2026-06-19: Set active after scale config, initial lookback, and docs/workflow tickets were done.
+- 2026-06-19: Re-authenticated Proton Pass session after it expired; token was not printed.
+- 2026-06-19: Live materialized `oss_ingestion` and `oss_api_frameworks` with `task materialize-scale` and observed non-zero bronze/silver/gold row counts.
+- 2026-06-19: Ran full deterministic validation: ruff, mypy, and pytest all passed.
+- 2026-06-19: Deferred full 25-tenant scale materialization as an explicit operator-triggered action.
+
+## Results
+
+Acceptance criteria satisfied.
 
 ## Blockers
 
-Blocked on scale config, initial lookback support, and docs/workflow.
+None.

@@ -194,6 +194,26 @@ Underlying script:
 uv run python tools/observe_github.py --tenant sandbox --format table
 ```
 
+## Portfolio-scale GitHub workflow
+
+The small default tenant config remains the normal development path. For a more serious portfolio-scale run, opt into the scale config explicitly:
+
+```bash
+export KABUTO_TENANTS_CONFIG=config/tenants.scale.yaml
+export KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS=180
+```
+
+The scale config contains 25 tenant partitions and 50 public repositories. The 180-day initial lookback prevents a first run from crawling all historical PRs for large repositories; later runs use incremental cursor state.
+
+Start with one representative tenant:
+
+```bash
+task materialize-scale TENANT=oss_orchestration
+task observe-scale TENANT=oss_orchestration
+```
+
+Then materialize additional tenants or use Dagster backfills only when you intentionally want to spend the GitHub API/time budget.
+
 ## Dagster
 
 ```bash

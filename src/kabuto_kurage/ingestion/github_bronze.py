@@ -39,6 +39,7 @@ DLT_ARTIFACT_SCHEMA_VERSION = 1
 GITHUB_FIXTURE_MODE_ENV = "KABUTO_GITHUB_FIXTURE_MODE"
 GITHUB_INCREMENTAL_ENABLED_ENV = "KABUTO_GITHUB_INCREMENTAL_ENABLED"
 GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV = "KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS"
+GITHUB_INITIAL_LOOKBACK_DAYS_ENV = "KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS"
 
 
 BRONZE_SCHEMA = pa.schema(
@@ -211,6 +212,7 @@ class GitHubDltSourceContext:
         fetched_at: datetime,
         max_repositories: int | None,
         pull_request_updated_since_by_repo: Mapping[str, datetime] | None = None,
+        default_pull_request_updated_since: datetime | None = None,
     ) -> None:
         self.tenant = tenant
         self.source_config = source_config
@@ -219,6 +221,7 @@ class GitHubDltSourceContext:
         self.fetched_at = fetched_at
         self.max_repositories = max_repositories
         self.pull_request_updated_since_by_repo = dict(pull_request_updated_since_by_repo or {})
+        self.default_pull_request_updated_since = default_pull_request_updated_since
         self._repositories: list[dict[str, Any]] | None = None
         self._repository_rate_limits: list[RateLimitSnapshot] = []
         self._pull_requests: list[dict[str, Any]] | None = None
@@ -299,6 +302,7 @@ class GitHubDltSourceContext:
                 self.client,
                 repositories,
                 updated_since_by_repo=self.pull_request_updated_since_by_repo,
+                default_updated_since=self.default_pull_request_updated_since,
             )
             self._pull_requests = pull_requests
             self._pull_request_rate_limits = rate_limits
@@ -500,6 +504,7 @@ def ingest_tenant_github_to_bronze(
     source_config = tenant.github
     incremental_state = load_incremental_state(tenant.tenant_id)
     updated_since_by_repo = _pull_request_updated_since_by_repo(incremental_state)
+    initial_updated_since = _initial_updated_since(run_fetched_at)
     if _fixture_mode_enabled():
         repository_records, pull_request_records, context, dlt_source = _fixture_bronze_records(
             tenant,
@@ -523,6 +528,7 @@ def ingest_tenant_github_to_bronze(
             fetched_at=run_fetched_at,
             max_repositories=max_repositories,
             pull_request_updated_since_by_repo=updated_since_by_repo,
+            default_pull_request_updated_since=initial_updated_since,
         )
         dlt_source = build_github_bronze_dlt_source(context)
 
@@ -770,6 +776,7 @@ def fetch_pull_requests_for_repositories(
     repositories: Sequence[Mapping[str, Any]],
     *,
     updated_since_by_repo: Mapping[str, datetime] | None = None,
+    default_updated_since: datetime | None = None,
 ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
     """Fetch pull requests for each repository, using updated_at cutoffs when available."""
 
@@ -785,7 +792,7 @@ def fetch_pull_requests_for_repositories(
             "sort": "updated",
             "direction": "desc",
         }
-        updated_since = (updated_since_by_repo or {}).get(full_name)
+        updated_since = (updated_since_by_repo or {}).get(full_name, default_updated_since)
         if updated_since is None:
             repository_pull_requests, repository_rate_limits = client.get_paginated(
                 f"/repos/{full_name}/pulls",
@@ -992,15 +999,24 @@ def _incremental_enabled() -> bool:
 
 
 def _incremental_lookback() -> timedelta:
-    configured = os.environ.get(GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV, "1")
+    return _lookback_from_env(GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV, default="1")
+
+
+def _initial_updated_since(reference_time: datetime) -> datetime | None:
+    configured = os.environ.get(GITHUB_INITIAL_LOOKBACK_DAYS_ENV)
+    if configured is None or configured == "":
+        return None
+    return reference_time - _lookback_from_env(GITHUB_INITIAL_LOOKBACK_DAYS_ENV, default="0")
+
+
+def _lookback_from_env(name: str, *, default: str) -> timedelta:
+    configured = os.environ.get(name, default)
     try:
         days = float(configured)
     except ValueError as exc:
-        raise GitHubIngestionError(
-            f"{GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV} must be numeric when set"
-        ) from exc
+        raise GitHubIngestionError(f"{name} must be numeric when set") from exc
     if days < 0:
-        raise GitHubIngestionError(f"{GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV} cannot be negative")
+        raise GitHubIngestionError(f"{name} cannot be negative")
     return timedelta(days=days)
 
 

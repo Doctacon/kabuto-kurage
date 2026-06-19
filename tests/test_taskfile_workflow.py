@@ -20,6 +20,8 @@ EXPECTED_TASKS = {
     "validate-stack",
     "dagster",
     "materialize",
+    "materialize-scale",
+    "observe-scale",
     "ingest",
     "silver",
     "gold",
@@ -79,6 +81,12 @@ def test_taskfile_supports_tenant_parameterized_pipeline_tasks() -> None:
     assert "{{.TENANT | default \"sandbox\"}}" == taskfile["vars"]["TENANT"]
     for task_name in ["ingest", "silver", "gold", "observe", "materialize"]:
         assert "{{.TENANT}}" in "\n".join(task_commands(taskfile["tasks"][task_name]))
+    scale_commands = "\n".join(
+        task_commands(taskfile["tasks"]["materialize-scale"])
+        + task_commands(taskfile["tasks"]["observe-scale"])
+    )
+    assert "config/tenants.scale.yaml" in scale_commands
+    assert "KABUTO_GITHUB_INITIAL_LOOKBACK_DAYS" in scale_commands
 
     assert "tools/ingest_github_bronze.py" in commands
     assert "tools/build_github_silver.py" in commands

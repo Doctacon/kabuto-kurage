@@ -28,6 +28,8 @@ def test_export_api_docs_map_each_endpoint_to_gold_tables() -> None:
     assert "gold/github/pr_throughput_daily" in docs
     assert "gold/github/pr_cycle_time" in docs
     assert "src/kabuto_kurage/queries/github_metrics.py" in docs
+    assert "DuckDB query layer" in docs
+    assert "delta_scan(...)" in docs
     assert "src/kabuto_kurage/mcp_server.py" in docs
     for tool_name in MCP_TOOLS:
         assert tool_name in docs

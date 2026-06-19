@@ -93,7 +93,7 @@ Not implemented yet:
 | REST export API | `src/kabuto_kurage/api/app.py` |
 | REST API auth | `src/kabuto_kurage/api/auth.py` |
 | MCP metric wrapper | `src/kabuto_kurage/mcp_server.py` |
-| Gold metric query layer | `src/kabuto_kurage/queries/github_metrics.py` |
+| DuckDB gold metric query layer | `src/kabuto_kurage/queries/github_metrics.py` |
 | Local observability | `src/kabuto_kurage/observability.py` |
 | Local IaC | `iac/local/` |
 | Validation tests | `tests/` |
@@ -206,6 +206,10 @@ The REST export API exposes only existing GitHub gold metrics under `/api/v1`:
 | `GET /api/v1/tenants/{tenant_id}/metrics/github/pr-throughput-daily` | `gold/github/pr_throughput_daily` |
 | `GET /api/v1/tenants/{tenant_id}/metrics/github/pr-cycle-time` | `gold/github/pr_cycle_time` |
 | `GET /api/v1/tenants/{tenant_id}/metrics/github/summary` | both gold metric tables |
+
+The shared export query layer uses DuckDB SQL with `delta_scan(...)` to scan only the
+requested tenant's gold Delta paths. Date/repository/merged filters, pagination, and
+summary aggregations are expressed in SQL rather than Python in-memory filtering.
 
 The API requires `Authorization: Bearer <token>` on every metric endpoint. Token
 configuration stays outside git and maps token values to explicit tenant allowlists.

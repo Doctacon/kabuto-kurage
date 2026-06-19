@@ -12,6 +12,7 @@ from deltalake import write_deltalake
 from kabuto_kurage.paths import delta_table_path
 from kabuto_kurage.queries.github_metrics import (
     GitHubMetricsQueryError,
+    query_backend_summary,
     query_pr_cycle_time,
     query_pr_throughput_daily,
     summarize_github_metrics,
@@ -187,6 +188,18 @@ def assert_no_raw_or_secret_fields(records: list[dict[str, Any]]) -> None:
         assert "source" not in record
         assert all("token" not in key.lower() for key in record)
         assert all(value != "ghp_secret_should_not_appear" for value in record.values())
+
+
+def test_query_backend_summary_reports_duckdb_delta_scan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("KABUTO_DATA_ROOT", str(tmp_path))
+
+    assert query_backend_summary() == {
+        "engine": "duckdb",
+        "delta_scan": True,
+        "storage_profile": "local",
+    }
 
 
 def test_query_pr_throughput_daily_filters_date_repository_limit_and_offset(

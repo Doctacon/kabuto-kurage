@@ -10,7 +10,7 @@ This note records the concrete local stack selected by ticket `.loom/tickets/202
 | Package/runtime management | `uv` | Project instructions prefer `uv` for Python. It gives fast, reproducible local environments and can run narrow validation commands without committing a full scaffold yet. |
 | GitHub ingestion/extraction | `dlt` REST helpers against GitHub REST API | Makes dlthub/dlt the required ingestion layer while still keeping pagination, headers, rate-limit handling, and API versions visible in the project wrapper. |
 | Delta Lake library | `deltalake` Python package (`delta-rs`) with `pyarrow` tables | Open-source, local-first, no Spark/JVM requirement for the early portfolio loop, and exposes real Delta transaction-log behavior. |
-| DuckDB query validation | `duckdb` with the `delta` extension and `delta_scan(...)` | Proves the planned query layer can read Delta tables through SQL before replacing Python in-memory filtering. |
+| DuckDB query validation | `duckdb` with the `delta` extension and `delta_scan(...)` | Proves the export query layer can read Delta tables through SQL instead of Python in-memory filtering. |
 | Dagster integration | Dagster software-defined assets materialized locally | Matches the chosen first user-facing surface: Dagster UI. Assets can directly call ingestion/transformation functions and attach metadata such as row counts, paths, and freshness. |
 | Portable storage profiles | Local filesystem, MinIO, and Cloudflare R2 shapes | Local remains deterministic for tests; MinIO is the open-source S3-compatible profile; R2 is Chris's remote S3-compatible profile. |
 | Deterministic tests | Fixture-driven tests plus optional live GitHub validation | Real GitHub data is valuable for the portfolio demo, but deterministic tests should use committed fixtures/mocked HTTP responses so CI and local validation do not depend on tokens, rate limits, or mutable external state. |
@@ -63,7 +63,7 @@ LOAD delta;
 SELECT * FROM delta_scan('/path/to/local/delta/table');
 ```
 
-For S3-compatible object storage, DuckDB also needs object-store credentials. The exact production query module will centralize this later; this ticket documents the required shapes only.
+For S3-compatible object storage, DuckDB also needs object-store credentials. The export query module centralizes DuckDB extension/secret setup through the active storage profile; the examples below show the required shapes only.
 
 ### MinIO placeholder shape
 

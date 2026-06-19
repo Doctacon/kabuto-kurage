@@ -74,8 +74,10 @@ maps to an explicit tenant allowlist. The export layer never defaults to all ten
 | `GET /api/v1/tenants/{tenant_id}/metrics/github/pr-cycle-time` | `github_pr_cycle_time` | `gold/github/pr_cycle_time` | `PR_CYCLE_TIME_TABLE` | Per-PR open-to-merge cycle time rows. |
 | `GET /api/v1/tenants/{tenant_id}/metrics/github/summary` | `github_metrics_summary` | `gold/github/pr_throughput_daily` and `gold/github/pr_cycle_time` | both constants | Compact demo summary aggregated from existing gold tables. |
 
-The REST API reads through the shared query layer in
-`src/kabuto_kurage/queries/github_metrics.py`. The MCP wrapper in
+The REST API reads through the shared DuckDB query layer in
+`src/kabuto_kurage/queries/github_metrics.py`. That layer uses DuckDB SQL and
+`delta_scan(...)` against tenant-scoped gold Delta tables instead of loading full
+metric tables into Python for filtering. The MCP wrapper in
 `src/kabuto_kurage/mcp_server.py` uses the same query layer and auth helper. Neither
 surface reads bronze tables, raw GitHub payload JSON, or GitHub token configuration.
 

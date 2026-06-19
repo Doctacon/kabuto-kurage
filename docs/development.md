@@ -35,6 +35,16 @@ uv run python tools/ingest_github_bronze.py \
   --max-repositories 1
 ```
 
+## GitHub silver models
+
+After bronze ingestion has produced tenant-scoped Delta tables:
+
+```bash
+uv run python tools/build_github_silver.py --tenant sandbox
+```
+
+For temporary validation data roots, use the same `--data-root` used for bronze ingestion.
+
 ## Dagster
 
 ```bash

@@ -8,7 +8,7 @@ The target shape is a miniature Jellyfish-inspired platform: GitHub engineering 
 
 ## Current milestone
 
-The repository is currently at the **GitHub bronze ingestion** milestone:
+The repository is currently at the **GitHub silver models** milestone:
 
 - Python 3.11+ project managed with `uv`.
 - Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
@@ -16,9 +16,10 @@ The repository is currently at the **GitHub bronze ingestion** milestone:
 - Dagster has a stable code-location module, but real assets are intentionally deferred to later tickets.
 - Tenant/source configuration is represented in `config/tenants.example.yaml`.
 - GitHub repositories and pull requests can be ingested into tenant-scoped bronze Delta tables.
+- Stable silver repository and pull request models can be materialized from bronze Delta tables.
 - Secrets and generated local data are ignored by git.
 
-Silver transforms, Dagster asset graph work, and metrics are tracked in Loom tickets under `.loom/tickets/`.
+Dagster asset graph work and metrics are tracked in Loom tickets under `.loom/tickets/`.
 
 ## Prerequisites
 
@@ -91,6 +92,12 @@ uv run python tools/ingest_github_bronze.py \
   --max-repositories 1
 ```
 
+Build GitHub silver models from existing bronze tables:
+
+```bash
+uv run python tools/build_github_silver.py --tenant sandbox
+```
+
 Run the stack validation proof from the previous milestone:
 
 ```bash
@@ -113,7 +120,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes.
 
 ## Project memory
 

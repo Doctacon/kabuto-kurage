@@ -1,4 +1,4 @@
-Status: blocked
+Status: done
 Created: 2026-06-18
 Updated: 2026-06-18
 Parent: .loom/tickets/2026-06-18-build-engineering-metrics-export-surface.md
@@ -41,18 +41,31 @@ Required tenant access behavior:
 
 ## Progress and Notes
 
-- Not started.
+- 2026-06-18: Added FastAPI/uvicorn dependencies for an open-source local REST API surface.
+- 2026-06-18: Added importable API app at `kabuto_kurage.api.app:app` with `create_app()`.
+- 2026-06-18: Added tenant-scoped bearer-token auth with explicit token-to-tenant allowlists from `KABUTO_API_TOKENS_JSON` or `KABUTO_API_TOKENS_CONFIG` using `token_env` references.
+- 2026-06-18: Added required `/api/v1/tenants/{tenant_id}/metrics/github/...` endpoints over the shared query layer.
+- 2026-06-18: Added endpoint docs in `docs/export-api.md`.
+- 2026-06-18: Added deterministic endpoint tests in `tests/test_export_rest_api.py`.
+- 2026-06-18: Validated with `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`.
 
 ## Current State
 
-Blocked. This belongs to the export/API follow-up milestone, which is awaiting explicit operator/product selection, and it also depends on the query layer ticket.
+Done. The local tenant-scoped REST API is implemented and validated.
+
+Evidence: `.loom/evidence/2026-06-18-tenant-scoped-rest-api-validation.md`.
+
+Review: `.loom/reviews/2026-06-18-tenant-scoped-rest-api-review.md`.
 
 ## Journal
 
 - 2026-06-18: Created as a future child of the export/API follow-up plan.
 - 2026-06-18: Marked blocked pending export/API milestone selection and query-layer completion.
+- 2026-06-18: Query layer completed; moved to active and delegated REST API implementation to worker.
+- 2026-06-18: Implemented FastAPI app, auth config loader, endpoint tests, and API docs.
+- 2026-06-18: Recorded validation evidence and review.
+- 2026-06-18: Moved ticket to done after validation passed.
 
 ## Blockers
 
-- Requires query layer ticket.
-- Requires operator/product decision to begin the export/API follow-up milestone.
+None.

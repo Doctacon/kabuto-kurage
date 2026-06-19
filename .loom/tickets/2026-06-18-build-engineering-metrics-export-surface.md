@@ -62,10 +62,13 @@ Active. User approved proceeding with the export/API follow-up milestone on 2026
 - 2026-06-18: Created as follow-up parent plan from `.loom/tickets/2026-06-18-plan-export-api-followup.md`.
 - 2026-06-18: Marked blocked because implementing the export surface is a new milestone requiring explicit selection.
 - 2026-06-18: User approved proceeding with the follow-up milestone; parent moved to active and query-layer child started.
+- 2026-06-18: Query layer and tenant-scoped REST API children completed; documentation/validation child is the next dependency before MCP.
 
 ## Progress and Notes
 
 - 2026-06-18: Created as follow-up parent plan from `.loom/tickets/2026-06-18-plan-export-api-followup.md`.
+- 2026-06-18: Completed `.loom/tickets/2026-06-18-build-export-query-layer.md`.
+- 2026-06-18: Completed `.loom/tickets/2026-06-18-implement-tenant-scoped-rest-api.md`.
 
 ## Blockers
 

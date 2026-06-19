@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from dagster import materialize
+from dagster import DefaultScheduleStatus, materialize
 from deltalake import DeltaTable
 
 import kabuto_kurage.assets.github as github_assets
@@ -90,6 +90,33 @@ def test_definitions_expose_partitioned_github_assets_through_gold_metrics() -> 
         "personal",
         "sandbox",
     )
+
+
+def test_definitions_include_asset_checks_retry_policy_and_stopped_schedule() -> None:
+    check_specs = [
+        check_spec
+        for check_definition in defs.asset_checks or []
+        for check_spec in check_definition.check_specs
+    ]
+
+    assert len(check_specs) == 6
+    assert {check.asset_key.to_user_string() for check in check_specs} == {
+        "github_bronze_repositories",
+        "github_bronze_pull_requests",
+        "github_silver_repositories",
+        "github_silver_pull_requests",
+        "github_gold_pr_throughput_daily",
+        "github_gold_pr_cycle_time",
+    }
+    assert {check.name for check in check_specs} == {"delta_table_health"}
+
+    assert github_assets.github_assets_job.op_retry_policy is not None
+    assert github_assets.github_assets_job.op_retry_policy.max_retries == 2
+    assert len(defs.schedules or []) == 1
+    schedule = (defs.schedules or [])[0]
+    assert schedule.name == "github_assets_refresh_schedule"
+    assert schedule.cron_schedule == "0 */6 * * *"
+    assert schedule.default_status == DefaultScheduleStatus.STOPPED
 
 
 def test_github_asset_graph_materializes_bronze_silver_and_gold_without_live_github(

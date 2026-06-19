@@ -1,20 +1,29 @@
 """Dagster assets for the GitHub-to-Delta local data flow."""
 
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 from dagster import (
+    AssetCheckExecutionContext,
+    AssetCheckResult,
+    AssetCheckSeverity,
     AssetExecutionContext,
     AssetKey,
     AssetSpec,
+    DefaultScheduleStatus,
     Definitions,
     MaterializeResult,
     MetadataValue,
+    RetryPolicy,
+    RunRequest,
+    ScheduleEvaluationContext,
     StaticPartitionsDefinition,
+    asset_check,
     define_asset_job,
     multi_asset,
+    schedule,
 )
 from deltalake import DeltaTable
 
@@ -47,6 +56,7 @@ GITHUB_SILVER_PULL_REQUESTS = "github_silver_pull_requests"
 GITHUB_GOLD_PR_THROUGHPUT_DAILY = "github_gold_pr_throughput_daily"
 GITHUB_GOLD_PR_CYCLE_TIME = "github_gold_pr_cycle_time"
 GITHUB_MAX_REPOSITORIES_ENV = "KABUTO_GITHUB_MAX_REPOSITORIES"
+GITHUB_ASSET_RETRY_POLICY = RetryPolicy(max_retries=2, delay=30)
 
 
 def tenant_partitions_def() -> StaticPartitionsDefinition:
@@ -214,6 +224,72 @@ def github_gold_assets(context: AssetExecutionContext) -> Iterable[MaterializeRe
     )
 
 
+def _github_asset_checks(
+    asset_name: str,
+    *,
+    layer: str,
+    resource_type: str,
+    required_columns: tuple[str, ...],
+    minimum_rows: int,
+) -> list[Any]:
+    @asset_check(
+        asset=AssetKey(asset_name),
+        name="delta_table_health",
+        partitions_def=TENANT_PARTITIONS,
+        description=(
+            "Validate Delta table existence, required columns, row count, and tenant scope."
+        ),
+    )
+    def delta_table_health_check(context: AssetCheckExecutionContext) -> AssetCheckResult:
+        tenant_id = validate_tenant_id(context.partition_key)
+        table_path = delta_table_path(tenant_id, layer, GITHUB_SOURCE, resource_type)
+        metadata: dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "layer": layer,
+            "resource_type": resource_type,
+            "table_path": MetadataValue.path(str(table_path)),
+            "minimum_rows": minimum_rows,
+        }
+        if not table_path.exists():
+            metadata["failure_reason"] = "delta_table_missing"
+            return AssetCheckResult(
+                passed=False, severity=AssetCheckSeverity.ERROR, metadata=metadata
+            )
+
+        table = DeltaTable(str(table_path)).to_pyarrow_table()
+        row_count = table.num_rows
+        column_names = set(table.schema.names)
+        tenant_values = (
+            set(table.column("tenant_id").to_pylist()) if "tenant_id" in column_names else set()
+        )
+        missing_columns = sorted(set(required_columns) - column_names)
+        unexpected_tenants = sorted(str(value) for value in tenant_values - {tenant_id})
+        metadata.update(
+            {
+                "row_count": row_count,
+                "required_columns": ",".join(required_columns),
+                "missing_columns": ",".join(missing_columns),
+                "unexpected_tenant_count": len(unexpected_tenants),
+            }
+        )
+        passed = row_count >= minimum_rows and not missing_columns and not unexpected_tenants
+        if unexpected_tenants:
+            metadata["unexpected_tenants"] = ",".join(unexpected_tenants)
+        if row_count < minimum_rows:
+            metadata["failure_reason"] = "row_count_below_minimum"
+        elif missing_columns:
+            metadata["failure_reason"] = "required_columns_missing"
+        elif unexpected_tenants:
+            metadata["failure_reason"] = "tenant_scope_violation"
+        return AssetCheckResult(
+            passed=passed,
+            severity=AssetCheckSeverity.ERROR if not passed else AssetCheckSeverity.WARN,
+            metadata=metadata,
+        )
+
+    return [delta_table_health_check]
+
+
 github_assets_job = define_asset_job(
     name="github_assets_job",
     selection=[
@@ -224,7 +300,83 @@ github_assets_job = define_asset_job(
         GITHUB_GOLD_PR_THROUGHPUT_DAILY,
         GITHUB_GOLD_PR_CYCLE_TIME,
     ],
+    op_retry_policy=GITHUB_ASSET_RETRY_POLICY,
 )
+
+
+@schedule(
+    job=github_assets_job,
+    cron_schedule="0 */6 * * *",
+    default_status=DefaultScheduleStatus.STOPPED,
+    description="Stopped-by-default six-hourly GitHub asset refresh for all tenant partitions.",
+)
+def github_assets_refresh_schedule(context: ScheduleEvaluationContext) -> Iterator[RunRequest]:
+    """Yield one scheduled run per configured tenant partition when manually enabled."""
+
+    scheduled_at = (
+        context.scheduled_execution_time.isoformat()
+        if context.scheduled_execution_time
+        else "manual"
+    )
+    for tenant_id in load_tenant_registry().tenant_ids:
+        yield RunRequest(
+            partition_key=tenant_id,
+            run_key=f"github-assets-{tenant_id}-{scheduled_at}",
+        )
+
+
+GITHUB_ASSET_CHECKS = [
+    *_github_asset_checks(
+        GITHUB_BRONZE_REPOSITORIES,
+        layer="bronze",
+        resource_type=REPOSITORY_RESOURCE,
+        required_columns=("tenant_id", "source", "resource_type", "fetched_at", "source_id"),
+        minimum_rows=1,
+    ),
+    *_github_asset_checks(
+        GITHUB_BRONZE_PULL_REQUESTS,
+        layer="bronze",
+        resource_type=PULL_REQUEST_RESOURCE,
+        required_columns=("tenant_id", "source", "resource_type", "fetched_at", "payload_json"),
+        minimum_rows=0,
+    ),
+    *_github_asset_checks(
+        GITHUB_SILVER_REPOSITORIES,
+        layer="silver",
+        resource_type=REPOSITORY_RESOURCE,
+        required_columns=("tenant_id", "source", "full_name", "fetched_at", "ingestion_run_id"),
+        minimum_rows=1,
+    ),
+    *_github_asset_checks(
+        GITHUB_SILVER_PULL_REQUESTS,
+        layer="silver",
+        resource_type=PULL_REQUEST_RESOURCE,
+        required_columns=(
+            "tenant_id",
+            "source",
+            "repository_full_name",
+            "number",
+            "updated_at",
+            "fetched_at",
+            "ingestion_run_id",
+        ),
+        minimum_rows=0,
+    ),
+    *_github_asset_checks(
+        GITHUB_GOLD_PR_THROUGHPUT_DAILY,
+        layer="gold",
+        resource_type=PR_THROUGHPUT_DAILY_TABLE,
+        required_columns=("tenant_id", "source", "repository_full_name", "metric_date"),
+        minimum_rows=0,
+    ),
+    *_github_asset_checks(
+        GITHUB_GOLD_PR_CYCLE_TIME,
+        layer="gold",
+        resource_type=PR_CYCLE_TIME_TABLE,
+        required_columns=("tenant_id", "source", "repository_full_name", "number"),
+        minimum_rows=0,
+    ),
+]
 
 
 def github_definitions() -> Definitions:
@@ -232,7 +384,9 @@ def github_definitions() -> Definitions:
 
     return Definitions(
         assets=[github_bronze_assets, github_silver_assets, github_gold_assets],
+        asset_checks=GITHUB_ASSET_CHECKS,
         jobs=[github_assets_job],
+        schedules=[github_assets_refresh_schedule],
     )
 
 

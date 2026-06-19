@@ -63,7 +63,7 @@ Implemented now:
 - GitHub REST API ingestion for repositories and pull requests through explicit dlt source/resources.
 - Tenant registry and tenant-scoped storage paths/URIs.
 - Delta Lake bronze/silver/gold tables with `local`, `minio`, and `r2` storage profile conventions; deterministic tests use the local filesystem profile.
-- Dagster assets partitioned by tenant.
+- Dagster assets partitioned by tenant, with asset checks, retry policy, and a stopped-by-default refresh schedule.
 - Gold metrics:
   - daily PR opened/merged/closed counts;
   - per-PR open-to-merge cycle time.
@@ -78,7 +78,7 @@ Not implemented yet:
 - Jira, CI/CD, incident, review/comment, or AI-tool integrations.
 - Customer dashboard or broader MCP/API surface beyond the three initial metric tools.
 - Near-real-time webhooks/queues/sensors.
-- Production auth, row-level security, encryption, alerting, live object-store provisioning, cloud deployment, or tenant resource isolation.
+- Production row-level security, encryption, alerting, live object-store provisioning, cloud deployment, or tenant resource isolation.
 
 ## Code and Data Layout
 
@@ -164,7 +164,7 @@ It intentionally keeps integration concerns visible while dlt owns source/resour
 
 The project preserves the tenant-scoped bronze Delta compatibility contract so downstream silver, gold, Dagster, REST, and MCP contracts stay stable while dlt source/resource/schema/state behavior is visible.
 
-This first snapshot-style bronze path overwrites each tenant/resource table after API fetching succeeds. That makes repeated local runs idempotent for the configured scope. It does not yet implement append-only raw history or incremental cursors.
+Bronze writes remain tenant-scoped snapshots. Repository snapshots are overwritten for the configured scope. Pull-request ingestion persists `updated_at` cursors in `.local/data/dlt/github/{tenant_id}/incremental_state.json`, applies a configurable lookback window, fetches only recently updated PR pages after the first run, and merges changed bronze rows with the existing snapshot by `source_id`. Append-only raw history is still out of scope.
 
 ### 3. Silver: stable analytical models
 

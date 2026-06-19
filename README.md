@@ -36,7 +36,7 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 - **Third-party integration:** real GitHub REST API ingestion using explicit dlt source/resources, with pagination, dlt schema/state artifacts, and rate-limit capture.
 - **Lakehouse layers:** bronze raw payloads, silver typed models, and gold metric tables stored as Delta Lake tables with portable `local`, `minio`, and `r2` storage profile conventions.
 - **Multi-tenancy:** three portfolio-style example tenants, tenant-scoped paths, `tenant_id` columns, and tests that fail closed on cross-tenant contamination.
-- **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
+- **Orchestration:** Dagster exposes six tenant-partitioned assets, asset checks, retry policy, and a stopped-by-default refresh schedule.
 - **Metrics:** daily PR throughput and per-PR open-to-merge cycle time.
 - **Observability:** local freshness/row-count/rate-limit CLI plus Dagster materialization metadata.
 - **Export surfaces:** FastAPI REST endpoints and a minimal MCP wrapper expose tenant-scoped gold metrics through a shared DuckDB SQL query layer with bearer-token allowlists.
@@ -84,7 +84,7 @@ Optional local infrastructure path:
 - Terraform CLI
 - Docker + `docker-compose` or `docker compose`
 
-Live GitHub materialization requires a GitHub token in `GITHUB_TOKEN` or `GH_TOKEN`. Tests do not require a token.
+Live GitHub materialization requires either a GitHub token in `GITHUB_TOKEN`/`GH_TOKEN` or GitHub App credentials. Tests do not require live credentials.
 
 ## Storage profiles and secret handling
 
@@ -147,10 +147,13 @@ Edit `config/tenants.local.yaml` if you want different GitHub owners/repositorie
 ```bash
 export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 export GITHUB_TOKEN=...              # or export GH_TOKEN=...
+# Optional production-style controls:
+export KABUTO_GITHUB_INCREMENTAL_ENABLED=true
+export KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS=1
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
 ```
 
-`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories. It is optional for explicit repository allowlists because the allowlist is already bounded.
+`KABUTO_GITHUB_MAX_REPOSITORIES=1` keeps demos bounded when a tenant config lists an owner with many repositories. It is optional for explicit repository allowlists because the allowlist is already bounded. Incremental PR sync is enabled by default: after the first full tenant run, cursor state under `.local/data/dlt/github/{tenant_id}/incremental_state.json` lets later runs fetch only recently updated pull requests with a lookback safety window.
 
 ## Run through Dagster UI
 

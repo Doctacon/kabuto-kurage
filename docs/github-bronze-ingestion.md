@@ -147,14 +147,22 @@ jq '.resources.pull_requests' .local/data/dlt/github/sandbox/state.json
 
 If GitHub returns an HTTP error, ingestion raises `GitHubIngestionError`. If a `403` or `429` response has zero remaining requests, the error message identifies likely rate-limit exhaustion. dlt owns the source/resource and REST extraction/pagination mechanics; the project preserves tenant-scoped Delta bronze tables as the downstream compatibility contract.
 
-## Idempotency Semantics
+## Idempotency and Incremental Semantics
 
-This first bronze path uses per-tenant/resource **overwrite** writes:
+Bronze writes are still tenant-scoped snapshots, but pull-request extraction now has an incremental production-style path:
 
 - `repositories` is overwritten for the tenant's configured repository scope.
-- `pull_requests` is overwritten for the repositories processed in the run.
+- `pull_requests` uses `updated_at` cursor state after the first run, fetches only recent/changed PR pages with a configurable lookback, then merges changed bronze rows with the existing tenant snapshot by `source_id`.
+- Incremental state is stored at `.local/data/dlt/github/{tenant_id}/incremental_state.json` or the equivalent `KABUTO_DATA_ROOT` path.
 
-That keeps repeated local runs idempotent for the configured scope and avoids duplicate raw rows while preserving raw payloads, run metadata, and dlt schema/state artifacts for the latest extraction. Historical run retention can be introduced later if the project needs immutable append-only bronze history.
+Controls:
+
+```bash
+export KABUTO_GITHUB_INCREMENTAL_ENABLED=true      # default
+export KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS=1  # default safety window
+```
+
+Set `KABUTO_GITHUB_INCREMENTAL_ENABLED=false` to force full pull-request scans for debugging.
 
 ## Fixture Mode for Dagster Smoke Tests
 
@@ -169,14 +177,20 @@ Use fixture mode for deterministic local demos and Dagster materialization smoke
 - Unexpected response shape: ingestion fails if list endpoints do not return lists or object endpoints do not return mappings.
 - Partial writes: API fetching completes before Delta writes begin, so a fetch failure does not overwrite existing bronze tables.
 
-## Secret Handling
+## Authentication and Secret Handling
 
-GitHub token values should be stored in Proton Pass or another password manager and
-exported into the shell as `GITHUB_TOKEN` or `GH_TOKEN` only when needed. Tenant YAML
-stores the env-var name, not the value. Do not commit `.env`, `.local/`, `.dlt/`,
-GitHub tokens, MinIO/R2 credentials, or dlt secrets. The dlt schema/state artifacts
-record source/resource metadata and row/rate-limit state, not token values.
+GitHub token values should be stored in Proton Pass or another password manager and exported into the shell only when needed. Tenant YAML stores the env-var name, not the value.
+
+Supported modes:
+
+| Mode | Env vars | Notes |
+| --- | --- | --- |
+| PAT fallback | `GITHUB_TOKEN` or `GH_TOKEN` | Fast local path for fine-grained read-only PATs. |
+| GitHub App | `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY_PATH` or `GITHUB_APP_PRIVATE_KEY` | Production-looking path that mints short-lived installation tokens. |
+| Auto | `KABUTO_GITHUB_AUTH_MODE=auto` | Uses PAT if present, otherwise GitHub App when fully configured. |
+
+Use `KABUTO_GITHUB_AUTH_MODE=app` to require GitHub App auth and fail closed if app credentials are missing. Do not commit `.env`, `.local/`, `.dlt/`, GitHub tokens, GitHub App private keys, MinIO/R2 credentials, or dlt secrets. The dlt schema/state artifacts record source/resource metadata and row/rate-limit state, not token values.
 
 ## Out of Scope
 
-This ticket does not implement silver transforms, Dagster assets, metrics, webhook ingestion, retries, or incremental cursors. Those are tracked by later Loom tickets.
+This bronze path still does not implement append-only raw history, webhook/event ingestion, review/comment data, or production queueing. Silver transforms, Dagster assets, metrics, retries, schedules, and incremental PR cursors are implemented elsewhere in the project.

@@ -10,17 +10,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
 import dlt
+import jwt
 import pyarrow as pa
 import requests
-from deltalake import write_deltalake
+from deltalake import DeltaTable, write_deltalake
 from dlt.extract.source import DltSource
 from dlt.sources.helpers.rest_client.auth import BearerTokenAuth
 from dlt.sources.helpers.rest_client.client import RESTClient
@@ -37,6 +39,13 @@ DEFAULT_USER_AGENT = "kabuto-kurage-github-bronze-ingestion"
 DLT_BRONZE_SOURCE_NAME = "github_bronze"
 DLT_ARTIFACT_SCHEMA_VERSION = 1
 GITHUB_FIXTURE_MODE_ENV = "KABUTO_GITHUB_FIXTURE_MODE"
+GITHUB_INCREMENTAL_ENABLED_ENV = "KABUTO_GITHUB_INCREMENTAL_ENABLED"
+GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV = "KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS"
+GITHUB_APP_ID_ENV = "GITHUB_APP_ID"
+GITHUB_APP_INSTALLATION_ID_ENV = "GITHUB_APP_INSTALLATION_ID"
+GITHUB_APP_PRIVATE_KEY_ENV = "GITHUB_APP_PRIVATE_KEY"
+GITHUB_APP_PRIVATE_KEY_PATH_ENV = "GITHUB_APP_PRIVATE_KEY_PATH"
+GITHUB_AUTH_MODE_ENV = "KABUTO_GITHUB_AUTH_MODE"
 
 BRONZE_SCHEMA = pa.schema(
     [
@@ -184,6 +193,14 @@ class GitHubClientProtocol(Protocol):
         self, path: str, *, params: Mapping[str, str | int] | None = None
     ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]: ...
 
+    def get_paginated_since_updated_at(
+        self,
+        path: str,
+        *,
+        updated_since: datetime,
+        params: Mapping[str, str | int] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]: ...
+
     def get_one(self, path: str) -> tuple[dict[str, Any], RateLimitSnapshot]: ...
 
 
@@ -199,6 +216,7 @@ class GitHubDltSourceContext:
         ingestion_run_id: str,
         fetched_at: datetime,
         max_repositories: int | None,
+        pull_request_updated_since_by_repo: Mapping[str, datetime] | None = None,
     ) -> None:
         self.tenant = tenant
         self.source_config = source_config
@@ -206,6 +224,7 @@ class GitHubDltSourceContext:
         self.ingestion_run_id = ingestion_run_id
         self.fetched_at = fetched_at
         self.max_repositories = max_repositories
+        self.pull_request_updated_since_by_repo = dict(pull_request_updated_since_by_repo or {})
         self._repositories: list[dict[str, Any]] | None = None
         self._repository_rate_limits: list[RateLimitSnapshot] = []
         self._pull_requests: list[dict[str, Any]] | None = None
@@ -283,7 +302,9 @@ class GitHubDltSourceContext:
         if self._pull_requests is None:
             repositories, _rate_limits = self._fetch_repositories()
             pull_requests, rate_limits = fetch_pull_requests_for_repositories(
-                self.client, repositories
+                self.client,
+                repositories,
+                updated_since_by_repo=self.pull_request_updated_since_by_repo,
             )
             self._pull_requests = pull_requests
             self._pull_request_rate_limits = rate_limits
@@ -354,6 +375,34 @@ class GitHubRestClient:
             _raise_for_status(response)
             page_items = list(page)
             items.extend(_ensure_mapping_items(page_items, endpoint=path))
+
+        return items, rate_limits
+
+    def get_paginated_since_updated_at(
+        self,
+        path: str,
+        *,
+        updated_since: datetime,
+        params: Mapping[str, str | int] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
+        """GET pages sorted by updated_at desc and stop after the incremental cutoff."""
+
+        items: list[dict[str, Any]] = []
+        rate_limits: list[RateLimitSnapshot] = []
+        for page in self._rest_client.paginate(path, params=dict(params or {})):
+            response = page.response
+            rate_limits.append(RateLimitSnapshot.from_headers(response.headers))
+            _raise_for_status(response)
+            page_items = _ensure_mapping_items(list(page), endpoint=path)
+            if not page_items:
+                continue
+            for item in page_items:
+                item_updated_at = _github_timestamp(item.get("updated_at"))
+                if item_updated_at is None or item_updated_at >= updated_since:
+                    items.append(item)
+            oldest_page_update = _oldest_github_updated_at(page_items)
+            if oldest_page_update is not None and oldest_page_update < updated_since:
+                break
 
         return items, rate_limits
 
@@ -455,6 +504,8 @@ def ingest_tenant_github_to_bronze(
     run_id = ingestion_run_id or str(uuid.uuid4())
     run_fetched_at = fetched_at or datetime.now(tz=UTC)
     source_config = tenant.github
+    incremental_state = load_incremental_state(tenant.tenant_id)
+    updated_since_by_repo = _pull_request_updated_since_by_repo(incremental_state)
     if _fixture_mode_enabled():
         repository_records, pull_request_records, context, dlt_source = _fixture_bronze_records(
             tenant,
@@ -477,6 +528,7 @@ def ingest_tenant_github_to_bronze(
             ingestion_run_id=run_id,
             fetched_at=run_fetched_at,
             max_repositories=max_repositories,
+            pull_request_updated_since_by_repo=updated_since_by_repo,
         )
         dlt_source = build_github_bronze_dlt_source(context)
 
@@ -494,7 +546,11 @@ def ingest_tenant_github_to_bronze(
         tenant.tenant_id, "bronze", GITHUB_SOURCE, PULL_REQUEST_RESOURCE
     )
     write_bronze_records(repository_path, repository_records)
-    write_bronze_records(pull_request_path, pull_request_records)
+    if _incremental_enabled() and not _fixture_mode_enabled():
+        pull_request_records = merge_bronze_records(pull_request_path, pull_request_records)
+        write_incremental_state(tenant.tenant_id, incremental_state, pull_request_records)
+    else:
+        write_bronze_records(pull_request_path, pull_request_records)
     dlt_artifacts = write_dlt_artifacts(tenant.tenant_id, dlt_source, context)
 
     return GitHubBronzeIngestionResult(
@@ -555,6 +611,21 @@ class _FixtureGitHubClient:
         if path.endswith("/pulls"):
             return [self._pull_request_payload], [_fixture_rate_limit(remaining=4998)]
         raise GitHubIngestionError(f"Unexpected fixture GitHub paginated path: {path}")
+
+    def get_paginated_since_updated_at(
+        self,
+        path: str,
+        *,
+        updated_since: datetime,
+        params: Mapping[str, str | int] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
+        records, rate_limits = self.get_paginated(path, params=params)
+        return [
+            record
+            for record in records
+            if (_github_timestamp(record.get("updated_at")) or datetime.min.replace(tzinfo=UTC))
+            >= updated_since
+        ], rate_limits
 
     def get_one(self, path: str) -> tuple[dict[str, Any], RateLimitSnapshot]:
         if path.startswith("/repos/"):
@@ -701,9 +772,12 @@ def fetch_configured_repositories(
 
 
 def fetch_pull_requests_for_repositories(
-    client: GitHubClientProtocol, repositories: Sequence[Mapping[str, Any]]
+    client: GitHubClientProtocol,
+    repositories: Sequence[Mapping[str, Any]],
+    *,
+    updated_since_by_repo: Mapping[str, datetime] | None = None,
 ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
-    """Fetch all pull requests for each repository payload."""
+    """Fetch pull requests for each repository, using updated_at cutoffs when available."""
 
     pull_requests: list[dict[str, Any]] = []
     rate_limits: list[RateLimitSnapshot] = []
@@ -711,10 +785,26 @@ def fetch_pull_requests_for_repositories(
         full_name = repository.get("full_name")
         if not isinstance(full_name, str) or not full_name:
             continue
-        repository_pull_requests, repository_rate_limits = client.get_paginated(
-            f"/repos/{full_name}/pulls",
-            params={"per_page": 100, "state": "all", "sort": "updated", "direction": "desc"},
-        )
+        params: dict[str, str | int] = {
+            "per_page": 100,
+            "state": "all",
+            "sort": "updated",
+            "direction": "desc",
+        }
+        updated_since = (updated_since_by_repo or {}).get(full_name)
+        if updated_since is None:
+            repository_pull_requests, repository_rate_limits = client.get_paginated(
+                f"/repos/{full_name}/pulls",
+                params=params,
+            )
+        else:
+            repository_pull_requests, repository_rate_limits = (
+                client.get_paginated_since_updated_at(
+                    f"/repos/{full_name}/pulls",
+                    updated_since=updated_since,
+                    params=params,
+                )
+            )
         rate_limits.extend(repository_rate_limits)
         pull_requests.extend(repository_pull_requests)
     return pull_requests, rate_limits
@@ -782,6 +872,86 @@ def write_bronze_records(table_path: Path, records: Sequence[Mapping[str, Any]])
     write_deltalake(str(table_path), _records_to_arrow_table(records), mode="overwrite")
 
 
+def merge_bronze_records(
+    table_path: Path, changed_records: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge changed bronze records with an existing Delta snapshot by source_id."""
+
+    records_by_source_id = {
+        _string_or_empty(record.get("source_id")): dict(record)
+        for record in _read_existing_bronze_records(table_path)
+        if _string_or_empty(record.get("source_id"))
+    }
+    for record in changed_records:
+        source_id = _string_or_empty(record.get("source_id"))
+        if source_id:
+            records_by_source_id[source_id] = dict(record)
+    records = sorted(
+        records_by_source_id.values(),
+        key=lambda record: (
+            _string_or_empty(record.get("source_repo")),
+            _string_or_empty(record.get("source_id")),
+        ),
+    )
+    write_bronze_records(table_path, records)
+    return records
+
+
+def load_incremental_state(tenant_id: str) -> dict[str, Any]:
+    """Load tenant-scoped GitHub incremental cursor state from local dlt artifacts."""
+
+    state_path = _incremental_state_path(tenant_id)
+    if not _incremental_enabled() or not state_path.exists():
+        return {"schema_version": 1, "pull_requests": {}}
+    raw = json.loads(state_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise GitHubIngestionError(f"Incremental state must be a JSON object: {state_path}")
+    raw.setdefault("schema_version", 1)
+    raw.setdefault("pull_requests", {})
+    return raw
+
+
+def write_incremental_state(
+    tenant_id: str,
+    previous_state: Mapping[str, Any],
+    pull_request_records: Sequence[Mapping[str, Any]],
+) -> None:
+    """Persist max pull-request updated_at cursors by repository."""
+
+    state = dict(previous_state)
+    pull_requests = dict(state.get("pull_requests") or {})
+    for record in pull_request_records:
+        payload = _json_mapping(record.get("payload_json"))
+        repository = _string_or_none(
+            record.get("source_repo")
+        ) or _pull_request_repository_full_name(payload)
+        updated_at = _github_timestamp(payload.get("updated_at"))
+        if repository is None or updated_at is None:
+            continue
+        current = _github_timestamp(pull_requests.get(repository))
+        if current is None or updated_at > current:
+            pull_requests[repository] = updated_at.isoformat().replace("+00:00", "Z")
+    state.update(
+        {
+            "schema_version": 1,
+            "source": GITHUB_SOURCE,
+            "resource_type": PULL_REQUEST_RESOURCE,
+            "tenant_id": tenant_id,
+            "updated_at": datetime.now(tz=UTC).isoformat(),
+            "pull_requests": pull_requests,
+        }
+    )
+    state_path = _incremental_state_path(tenant_id)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _read_existing_bronze_records(table_path: Path) -> list[dict[str, Any]]:
+    if not table_path.exists():
+        return []
+    return [dict(row) for row in DeltaTable(str(table_path)).to_pyarrow_table().to_pylist()]
+
+
 def _records_to_arrow_table(records: Sequence[Mapping[str, Any]]) -> pa.Table:
     columns: dict[str, list[Any]] = {field.name: [] for field in BRONZE_SCHEMA}
     for record in records:
@@ -822,17 +992,130 @@ def _bronze_record(
     }
 
 
-def _token_from_env(source_config: GitHubSourceConfig) -> str:
-    token = os.environ.get(source_config.token_env)
-    if not token and source_config.token_env != "GH_TOKEN":
-        token = os.environ.get("GH_TOKEN")
-    if not token:
+def _incremental_enabled() -> bool:
+    configured = os.environ.get(GITHUB_INCREMENTAL_ENABLED_ENV, "true")
+    return configured.lower() not in {"0", "false", "no", "off"}
+
+
+def _incremental_lookback() -> timedelta:
+    configured = os.environ.get(GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV, "1")
+    try:
+        days = float(configured)
+    except ValueError as exc:
         raise GitHubIngestionError(
-            f"GitHub token not found. Set {source_config.token_env}"
-            + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
-            + "."
+            f"{GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV} must be numeric when set"
+        ) from exc
+    if days < 0:
+        raise GitHubIngestionError(f"{GITHUB_INCREMENTAL_LOOKBACK_DAYS_ENV} cannot be negative")
+    return timedelta(days=days)
+
+
+def _pull_request_updated_since_by_repo(state: Mapping[str, Any]) -> dict[str, datetime]:
+    if not _incremental_enabled():
+        return {}
+    pull_requests = state.get("pull_requests")
+    if not isinstance(pull_requests, Mapping):
+        return {}
+    lookback = _incremental_lookback()
+    cutoffs: dict[str, datetime] = {}
+    for repository, value in pull_requests.items():
+        if not isinstance(repository, str):
+            continue
+        cursor = _github_timestamp(value)
+        if cursor is not None:
+            cutoffs[repository] = cursor - lookback
+    return cutoffs
+
+
+def _incremental_state_path(tenant_id: str) -> Path:
+    return _dlt_artifact_root(tenant_id) / "incremental_state.json"
+
+
+def _token_from_env(source_config: GitHubSourceConfig) -> str:
+    auth_mode = os.environ.get(GITHUB_AUTH_MODE_ENV, "auto").lower()
+    if auth_mode not in {"auto", "pat", "app"}:
+        raise GitHubIngestionError(f"{GITHUB_AUTH_MODE_ENV} must be one of auto, pat, or app")
+    if auth_mode in {"auto", "pat"}:
+        token = os.environ.get(source_config.token_env)
+        if not token and source_config.token_env != "GH_TOKEN":
+            token = os.environ.get("GH_TOKEN")
+        if token:
+            return token
+        if auth_mode == "pat":
+            raise GitHubIngestionError(
+                f"GitHub token not found. Set {source_config.token_env}"
+                + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
+                + "."
+            )
+    if auth_mode in {"auto", "app"} and _github_app_configured():
+        return mint_github_app_installation_token()
+    raise GitHubIngestionError(
+        f"GitHub token not found. Set {source_config.token_env}"
+        + (" or GH_TOKEN" if source_config.token_env != "GH_TOKEN" else "")
+        + f", or configure {GITHUB_APP_ID_ENV}, {GITHUB_APP_INSTALLATION_ID_ENV}, and "
+        + f"{GITHUB_APP_PRIVATE_KEY_ENV}/{GITHUB_APP_PRIVATE_KEY_PATH_ENV}."
+    )
+
+
+def _github_app_configured() -> bool:
+    return bool(
+        os.environ.get(GITHUB_APP_ID_ENV)
+        and os.environ.get(GITHUB_APP_INSTALLATION_ID_ENV)
+        and (
+            os.environ.get(GITHUB_APP_PRIVATE_KEY_ENV)
+            or os.environ.get(GITHUB_APP_PRIVATE_KEY_PATH_ENV)
         )
+    )
+
+
+def mint_github_app_installation_token(session: requests.Session | None = None) -> str:
+    """Mint a short-lived GitHub App installation token from environment configuration."""
+
+    app_id = _required_env(GITHUB_APP_ID_ENV)
+    installation_id = _required_env(GITHUB_APP_INSTALLATION_ID_ENV)
+    private_key = _github_app_private_key()
+    now = int(time.time())
+    encoded_jwt = jwt.encode(
+        {"iat": now - 60, "exp": now + 9 * 60, "iss": app_id},
+        private_key,
+        algorithm="RS256",
+    )
+    http = session or requests.Session()
+    response = http.post(
+        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {encoded_jwt}",
+            "X-GitHub-Api-Version": GITHUB_API_VERSION,
+            "User-Agent": DEFAULT_USER_AGENT,
+        },
+        timeout=30,
+    )
+    _raise_for_status(response)
+    body = response.json()
+    token = body.get("token") if isinstance(body, Mapping) else None
+    if not isinstance(token, str) or not token:
+        raise GitHubIngestionError("GitHub App installation token response did not include token")
     return token
+
+
+def _github_app_private_key() -> str:
+    private_key = os.environ.get(GITHUB_APP_PRIVATE_KEY_ENV)
+    if private_key:
+        return private_key.replace("\\n", "\n")
+    private_key_path = os.environ.get(GITHUB_APP_PRIVATE_KEY_PATH_ENV)
+    if not private_key_path:
+        raise GitHubIngestionError(
+            f"Set {GITHUB_APP_PRIVATE_KEY_ENV} or {GITHUB_APP_PRIVATE_KEY_PATH_ENV}"
+        )
+    return Path(private_key_path).expanduser().read_text(encoding="utf-8")
+
+
+def _required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise GitHubIngestionError(f"Missing required GitHub App environment variable: {name}")
+    return value
 
 
 def _raise_for_status(response: requests.Response) -> None:
@@ -853,6 +1136,32 @@ def _ensure_mapping_items(items: Iterable[Any], *, endpoint: str) -> list[dict[s
             raise GitHubIngestionError(f"Expected object items from GitHub endpoint {endpoint}")
         mapped_items.append(dict(item))
     return mapped_items
+
+
+def _oldest_github_updated_at(items: Sequence[Mapping[str, Any]]) -> datetime | None:
+    values = [_github_timestamp(item.get("updated_at")) for item in items]
+    present = [value for value in values if value is not None]
+    return min(present) if present else None
+
+
+def _github_timestamp(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _json_mapping(value: object) -> dict[str, Any]:
+    if not isinstance(value, str) or not value:
+        return {}
+    parsed = json.loads(value)
+    return dict(parsed) if isinstance(parsed, Mapping) else {}
 
 
 def _source_id(payload: Mapping[str, Any]) -> str:

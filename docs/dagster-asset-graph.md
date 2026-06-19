@@ -25,6 +25,12 @@ github_bronze_pull_requests ┘
 
 The two bronze assets are produced by one Dagster multi-asset because the existing GitHub ingestion function fetches repositories and pull requests in one bounded batch. The two silver assets are also produced together because the existing silver transform materializes both modeled tables from bronze. The two gold assets are produced together because they both derive from the silver pull-request table.
 
+## Asset Checks, Retries, and Schedule
+
+Dagster definitions now include one `delta_table_health` check per asset. Each check validates that the Delta table exists, required columns are present, row counts meet the configured minimum, and every row belongs to the selected tenant partition.
+
+The `github_assets_job` has an op retry policy of two retries with a 30 second delay. A stopped-by-default schedule named `github_assets_refresh_schedule` is included to show the intended production orchestration shape without unexpectedly polling GitHub during local development. If manually enabled, it emits one run per configured tenant every six hours (`0 */6 * * *`).
+
 ## Tenant Partitions
 
 Each asset is statically partitioned by configured `tenant_id`. The partition set is loaded from the active tenant registry when the Dagster code location starts:
@@ -114,4 +120,4 @@ Use `uv run python tools/observe_github.py --tenant sandbox --format table` outs
 
 ## Out of Scope
 
-This milestone does not add REST APIs, MCP, dashboards, sensors, schedules, review/comment ingestion, or production deployment. Those are tracked by later Loom tickets.
+This milestone still does not add dashboards, sensors, review/comment ingestion, production deployment, or alert delivery. REST, MCP, stopped-by-default schedules, retries, and asset checks are implemented in the current local project.

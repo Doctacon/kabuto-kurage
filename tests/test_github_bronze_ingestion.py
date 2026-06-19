@@ -15,11 +15,16 @@ from requests.models import PreparedRequest
 
 from kabuto_kurage.ingestion.github_bronze import (
     DLT_BRONZE_SOURCE_NAME,
+    GITHUB_APP_ID_ENV,
+    GITHUB_APP_INSTALLATION_ID_ENV,
+    GITHUB_APP_PRIVATE_KEY_ENV,
+    GITHUB_AUTH_MODE_ENV,
     GitHubDltSourceContext,
     GitHubRestClient,
     RateLimitSnapshot,
     build_github_bronze_dlt_source,
     ingest_tenant_github_to_bronze,
+    mint_github_app_installation_token,
     pull_request_payload_to_bronze_record,
     repository_payload_to_bronze_record,
 )
@@ -44,11 +49,17 @@ def repository_payload(full_name: str = "octocat/Hello-World") -> dict[str, Any]
     }
 
 
-def pull_request_payload(full_name: str = "octocat/Hello-World") -> dict[str, Any]:
+def pull_request_payload(
+    full_name: str = "octocat/Hello-World",
+    *,
+    pull_request_id: int = 1,
+    number: int = 1347,
+    updated_at: str = "2026-06-01T12:00:00Z",
+) -> dict[str, Any]:
     return {
-        "id": 1,
-        "node_id": "MDExOlB1bGxSZXF1ZXN0MQ==",
-        "number": 1347,
+        "id": pull_request_id,
+        "node_id": f"pull-request-{pull_request_id}",
+        "number": number,
         "state": "closed",
         "title": "Improve README",
         "html_url": f"https://github.com/{full_name}/pull/1347",
@@ -56,6 +67,7 @@ def pull_request_payload(full_name: str = "octocat/Hello-World") -> dict[str, An
         "base": {"repo": {"full_name": full_name}},
         "head": {"repo": {"full_name": "contributor/fork"}},
         "created_at": "2026-06-01T00:00:00Z",
+        "updated_at": updated_at,
         "merged_at": "2026-06-02T00:00:00Z",
     }
 
@@ -163,7 +175,7 @@ def test_pull_request_payload_to_bronze_record_preserves_raw_payload_and_metadat
 
     assert record["tenant_id"] == "sandbox"
     assert record["resource_type"] == "pull_requests"
-    assert record["source_id"] == "MDExOlB1bGxSZXF1ZXN0MQ=="
+    assert record["source_id"] == "pull-request-1"
     assert record["source_owner"] == "octocat"
     assert record["source_repo"] == "octocat/Hello-World"
     assert json.loads(record["payload_json"])["base"]["repo"]["full_name"] == "octocat/Hello-World"
@@ -322,3 +334,109 @@ def test_ingest_tenant_github_to_bronze_writes_idempotent_delta_tables(
     assert request_counts["/users/octocat/repos"] == 2
     assert request_counts["/repos/octocat/Hello-World"] == 2
     assert request_counts["/repos/octocat/Hello-World/pulls"] == 2
+
+
+def test_incremental_pull_request_sync_preserves_existing_bronze_rows(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("KABUTO_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("KABUTO_GITHUB_INCREMENTAL_LOOKBACK_DAYS", "0")
+    request_counts: dict[str, int] = {}
+
+    def handler(request: PreparedRequest) -> requests.Response:
+        path = request.path_url.split("?", 1)[0]
+        request_counts[path] = request_counts.get(path, 0) + 1
+        if path == "/users/octocat/repos":
+            return response(request, [], remaining="4999")
+        if path == "/repos/octocat/Hello-World":
+            return response(request, repository_payload("octocat/Hello-World"), remaining="4998")
+        if path == "/repos/octocat/Hello-World/pulls" and request_counts[path] == 1:
+            return response(
+                request,
+                [
+                    pull_request_payload(
+                        "octocat/Hello-World",
+                        pull_request_id=1,
+                        number=1,
+                        updated_at="2026-06-01T00:00:00Z",
+                    )
+                ],
+                remaining="4997",
+            )
+        if path == "/repos/octocat/Hello-World/pulls" and request_counts[path] == 2:
+            return response(
+                request,
+                [
+                    pull_request_payload(
+                        "octocat/Hello-World",
+                        pull_request_id=2,
+                        number=2,
+                        updated_at="2026-06-03T00:00:00Z",
+                    )
+                ],
+                remaining="4996",
+            )
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    for run_id in ("run-one", "run-two"):
+        session = github_session(handler)
+        try:
+            client = GitHubRestClient(
+                api_base_url="https://api.github.test", token="fake-token", session=session
+            )
+            ingest_tenant_github_to_bronze(
+                tenant_config(),
+                token="fake-token",
+                ingestion_run_id=run_id,
+                fetched_at=FETCHED_AT,
+                client=client,
+            )
+        finally:
+            session.close()
+
+    pull_requests_path = delta_table_path("sandbox", "bronze", "github", "pull_requests")
+    pull_request_rows = DeltaTable(str(pull_requests_path)).to_pyarrow_table().to_pylist()
+    assert [json.loads(row["payload_json"])["number"] for row in pull_request_rows] == [1, 2]
+    assert [row["ingestion_run_id"] for row in pull_request_rows] == ["run-one", "run-two"]
+
+    incremental_state_path = tmp_path / "dlt" / "github" / "sandbox" / "incremental_state.json"
+    incremental_state = json.loads(incremental_state_path.read_text(encoding="utf-8"))
+    assert incremental_state["pull_requests"]["octocat/Hello-World"] == "2026-06-03T00:00:00Z"
+
+
+class GitHubAppTokenSession:
+    def __init__(self) -> None:
+        self.authorization_header: str | None = None
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: int,
+    ) -> requests.Response:
+        assert url == "https://api.github.com/app/installations/456/access_tokens"
+        assert timeout == 30
+        self.authorization_header = headers["Authorization"]
+        github_response = requests.Response()
+        github_response.status_code = 201
+        github_response.url = url
+        github_response._content = json.dumps({"token": "installation-token"}).encode("utf-8")
+        return github_response
+
+
+def test_github_app_auth_mints_installation_token(monkeypatch) -> None:
+    monkeypatch.setenv(GITHUB_APP_ID_ENV, "123")
+    monkeypatch.setenv(GITHUB_APP_INSTALLATION_ID_ENV, "456")
+    monkeypatch.setenv(GITHUB_APP_PRIVATE_KEY_ENV, "private-key")
+    monkeypatch.setenv(GITHUB_AUTH_MODE_ENV, "app")
+    monkeypatch.setattr(
+        "kabuto_kurage.ingestion.github_bronze.jwt.encode",
+        lambda *_args, **_kwargs: "jwt-token",
+    )
+    session = GitHubAppTokenSession()
+
+    token = mint_github_app_installation_token(session=session)  # type: ignore[arg-type]
+
+    assert token == "installation-token"
+    assert session.authorization_header == "Bearer jwt-token"

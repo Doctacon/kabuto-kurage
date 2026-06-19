@@ -1,6 +1,6 @@
 # Development
 
-This document mirrors the command surface in the README for quick reference.
+This document mirrors the command surface in the README for quick reference. For the portfolio architecture narrative and data-flow diagram, start with `docs/architecture.md`.
 
 ## Environment
 

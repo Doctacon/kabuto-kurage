@@ -1,2 +1,2 @@
 # kabuto-kurage
-![kabuto-kurage](images/kabuto-kurage.png)   
+<img src="images/kabuto-kurage.png" width="300" />

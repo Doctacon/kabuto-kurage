@@ -1,4 +1,4 @@
-Status: blocked
+Status: active
 Created: 2026-06-18
 Updated: 2026-06-18
 Parent: .loom/tickets/2026-06-18-build-mini-engineering-intelligence-platform.md
@@ -55,12 +55,13 @@ The parent follow-up can close when:
 
 ## Current State
 
-Blocked pending an operator/product decision to start the export/API follow-up milestone. The Dagster-centered MVP parent does not require implementing this follow-up.
+Active. User approved proceeding with the export/API follow-up milestone on 2026-06-18.
 
 ## Journal
 
 - 2026-06-18: Created as follow-up parent plan from `.loom/tickets/2026-06-18-plan-export-api-followup.md`.
 - 2026-06-18: Marked blocked because implementing the export surface is a new milestone requiring explicit selection.
+- 2026-06-18: User approved proceeding with the follow-up milestone; parent moved to active and query-layer child started.
 
 ## Progress and Notes
 
@@ -68,4 +69,4 @@ Blocked pending an operator/product decision to start the export/API follow-up m
 
 ## Blockers
 
-- Awaiting operator/product decision to execute the export/API follow-up milestone.
+None for the parent. Child tickets should proceed in dependency order.

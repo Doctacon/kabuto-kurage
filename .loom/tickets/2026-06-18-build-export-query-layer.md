@@ -1,4 +1,4 @@
-Status: blocked
+Status: done
 Created: 2026-06-18
 Updated: 2026-06-18
 Parent: .loom/tickets/2026-06-18-build-engineering-metrics-export-surface.md
@@ -33,17 +33,24 @@ Expected query functions:
 
 ## Progress and Notes
 
-- Not started.
+- 2026-06-18: Added `kabuto_kurage.queries.github_metrics` as the shared query layer for existing GitHub gold Delta tables.
+- 2026-06-18: Added deterministic fixture-backed Delta tests in `tests/test_export_github_metrics.py`.
+- 2026-06-18: Validated with `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`.
 
 ## Current State
 
-Blocked pending operator/product decision to begin the export/API follow-up milestone.
+Done. Shared query functions over existing tenant-scoped gold Delta tables are implemented and validated.
 
 ## Journal
 
 - 2026-06-18: Created as the first executable child of the export/API follow-up plan.
 - 2026-06-18: Marked blocked until the follow-up milestone is explicitly selected for execution.
+- 2026-06-18: User approved the follow-up milestone; moved to active and delegated implementation to worker.
+- 2026-06-18: Implemented query functions for PR throughput daily, PR cycle time, and compact GitHub metrics summary.
+- 2026-06-18: Added tests for filters, pagination, JSON serialization, tenant isolation, invalid tenant IDs, missing gold tables, and mismatched tenant rows.
+- 2026-06-18: Recorded validation evidence in `.loom/evidence/2026-06-18-export-query-layer-validation.md` and review in `.loom/reviews/2026-06-18-export-query-layer-review.md`.
+- 2026-06-18: Moved ticket to done after validation passed.
 
 ## Blockers
 
-- Requires implementation approval for the export/API follow-up milestone.
+None.

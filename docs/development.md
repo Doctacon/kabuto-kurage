@@ -53,4 +53,24 @@ mkdir -p "$DAGSTER_HOME"
 uv run dagster dev -m kabuto_kurage.definitions
 ```
 
-The current scaffold intentionally has no real Dagster assets. The stable module path lets later tickets add assets without changing the developer command.
+The Dagster code location exposes four tenant-partitioned GitHub assets:
+
+- `github_bronze_repositories`
+- `github_bronze_pull_requests`
+- `github_silver_repositories`
+- `github_silver_pull_requests`
+
+Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
+
+CLI equivalent:
+
+```bash
+export GITHUB_TOKEN=...
+export KABUTO_GITHUB_MAX_REPOSITORIES=1
+uv run dagster asset materialize \
+  -m kabuto_kurage.definitions \
+  --partition sandbox \
+  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests
+```
+
+See `docs/dagster-asset-graph.md` for asset metadata and graph details.

@@ -1,10 +1,10 @@
 """Dagster code location for the local portfolio project.
 
-The first scaffold intentionally exposes an empty Definitions object. Downstream tickets
-will add GitHub ingestion, Delta Lake, and metric assets here without changing the
-Dagster startup command documented in the README.
+The GitHub asset graph is the first user-facing surface for the project. Start it with:
+
+    uv run dagster dev -m kabuto_kurage.definitions
 """
 
-from dagster import Definitions
+from kabuto_kurage.assets.github import github_definitions
 
-defs = Definitions(assets=[])
+defs = github_definitions()

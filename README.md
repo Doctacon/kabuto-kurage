@@ -8,18 +8,18 @@ The target shape is a miniature Jellyfish-inspired platform: GitHub engineering 
 
 ## Current milestone
 
-The repository is currently at the **GitHub silver models** milestone:
+The repository is currently at the **Dagster GitHub asset graph** milestone:
 
 - Python 3.11+ project managed with `uv`.
 - Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
 - Source and test layout are in place.
-- Dagster has a stable code-location module, but real assets are intentionally deferred to later tickets.
 - Tenant/source configuration is represented in `config/tenants.example.yaml`.
 - GitHub repositories and pull requests can be ingested into tenant-scoped bronze Delta tables.
 - Stable silver repository and pull request models can be materialized from bronze Delta tables.
+- Dagster exposes tenant-partitioned GitHub bronze and silver assets as the first user-facing surface.
 - Secrets and generated local data are ignored by git.
 
-Dagster asset graph work and metrics are tracked in Loom tickets under `.loom/tickets/`.
+Gold metrics are tracked in later Loom tickets under `.loom/tickets/`.
 
 ## Prerequisites
 
@@ -75,7 +75,14 @@ mkdir -p "$DAGSTER_HOME"
 uv run dagster dev -m kabuto_kurage.definitions
 ```
 
-The scaffold exposes an empty Dagster `Definitions` object so the command remains stable while downstream tickets add assets.
+Dagster will show four tenant-partitioned GitHub assets:
+
+- `github_bronze_repositories`
+- `github_bronze_pull_requests`
+- `github_silver_repositories`
+- `github_silver_pull_requests`
+
+Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe local demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
 
 Run GitHub bronze ingestion for one tenant:
 
@@ -92,10 +99,21 @@ uv run python tools/ingest_github_bronze.py \
   --max-repositories 1
 ```
 
-Build GitHub silver models from existing bronze tables:
+Build GitHub silver models from existing bronze tables without Dagster:
 
 ```bash
 uv run python tools/build_github_silver.py --tenant sandbox
+```
+
+Materialize the full GitHub bronze/silver asset graph from the CLI:
+
+```bash
+export GITHUB_TOKEN=...
+export KABUTO_GITHUB_MAX_REPOSITORIES=1
+uv run dagster asset materialize \
+  -m kabuto_kurage.definitions \
+  --partition sandbox \
+  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests
 ```
 
 Run the stack validation proof from the previous milestone:
@@ -120,7 +138,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata.
 
 ## Project memory
 

@@ -65,7 +65,7 @@ def pull_request_payload(full_name: str = "octocat/Hello-World") -> dict[str, An
     }
 
 
-def test_definitions_expose_four_partitioned_github_assets() -> None:
+def test_definitions_expose_partitioned_github_assets_through_gold_metrics() -> None:
     specs = {spec.key.to_user_string(): spec for spec in defs.resolve_all_asset_specs()}
 
     assert set(specs) >= {
@@ -73,9 +73,15 @@ def test_definitions_expose_four_partitioned_github_assets() -> None:
         "github_bronze_pull_requests",
         "github_silver_repositories",
         "github_silver_pull_requests",
+        "github_gold_pr_throughput_daily",
+        "github_gold_pr_cycle_time",
     }
     assert specs["github_bronze_repositories"].group_name == "github_bronze"
     assert specs["github_silver_pull_requests"].group_name == "github_silver"
+    assert specs["github_gold_pr_cycle_time"].group_name == "github_gold"
+    assert [dep.asset_key.to_user_string() for dep in specs["github_gold_pr_cycle_time"].deps] == [
+        "github_silver_pull_requests"
+    ]
     assert specs["github_bronze_repositories"].partitions_def is not None
     assert specs["github_bronze_repositories"].partitions_def.get_partition_keys() == (
         "personal",
@@ -83,7 +89,7 @@ def test_definitions_expose_four_partitioned_github_assets() -> None:
     )
 
 
-def test_github_asset_graph_materializes_bronze_and_silver_without_live_github(
+def test_github_asset_graph_materializes_bronze_silver_and_gold_without_live_github(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("KABUTO_DATA_ROOT", str(tmp_path))
@@ -153,7 +159,11 @@ def test_github_asset_graph_materializes_bronze_and_silver_without_live_github(
     )
 
     result = materialize(
-        [github_assets.github_bronze_assets, github_assets.github_silver_assets],
+        [
+            github_assets.github_bronze_assets,
+            github_assets.github_silver_assets,
+            github_assets.github_gold_assets,
+        ],
         partition_key="sandbox",
         raise_on_error=True,
     )
@@ -168,9 +178,12 @@ def test_github_asset_graph_materializes_bronze_and_silver_without_live_github(
         "github_bronze_pull_requests",
         "github_silver_repositories",
         "github_silver_pull_requests",
+        "github_gold_pr_throughput_daily",
+        "github_gold_pr_cycle_time",
     }
-    for materialization in materializations.values():
-        assert materialization.metadata["row_count"].value == 1
+    for name, materialization in materializations.items():
+        expected_count = 2 if name == "github_gold_pr_throughput_daily" else 1
+        assert materialization.metadata["row_count"].value == expected_count
         assert materialization.metadata["tenant_id"].value == "sandbox"
         assert materialization.metadata["source"].value == "github"
         assert "delta_table_path" in materialization.metadata
@@ -183,9 +196,27 @@ def test_github_asset_graph_materializes_bronze_and_silver_without_live_github(
         "latest_ingestion_run_id"
     ].value == "dagster-test-run"
 
+    assert materializations["github_gold_pr_throughput_daily"].metadata[
+        "metric_grain"
+    ].value == "tenant_repository_day"
+    assert materializations["github_gold_pr_cycle_time"].metadata["duration_unit"].value == (
+        "hours_and_days"
+    )
+
     silver_pr_rows = DeltaTable(
         str(delta_table_path("sandbox", "silver", "github", "pull_requests"))
     ).to_pyarrow_table().to_pylist()
+    gold_cycle_rows = DeltaTable(
+        str(delta_table_path("sandbox", "gold", "github", "pr_cycle_time"))
+    ).to_pyarrow_table().to_pylist()
     assert silver_pr_rows == [
         {**silver_pr_rows[0], "tenant_id": "sandbox", "repository_full_name": "octocat/Hello-World"}
+    ]
+    assert gold_cycle_rows == [
+        {
+            **gold_cycle_rows[0],
+            "tenant_id": "sandbox",
+            "repository_full_name": "octocat/Hello-World",
+            "cycle_time_hours": 24.0,
+        }
     ]

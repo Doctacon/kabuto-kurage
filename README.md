@@ -8,7 +8,7 @@ The target shape is a miniature Jellyfish-inspired platform: GitHub engineering 
 
 ## Current milestone
 
-The repository is currently at the **Dagster GitHub asset graph** milestone:
+The repository is currently at the **gold GitHub metrics** milestone:
 
 - Python 3.11+ project managed with `uv`.
 - Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
@@ -16,10 +16,9 @@ The repository is currently at the **Dagster GitHub asset graph** milestone:
 - Tenant/source configuration is represented in `config/tenants.example.yaml`.
 - GitHub repositories and pull requests can be ingested into tenant-scoped bronze Delta tables.
 - Stable silver repository and pull request models can be materialized from bronze Delta tables.
-- Dagster exposes tenant-partitioned GitHub bronze and silver assets as the first user-facing surface.
+- Dagster exposes tenant-partitioned GitHub bronze, silver, and gold metric assets as the first user-facing surface.
+- Gold metrics compute daily PR throughput and PR open-to-merge cycle time into tenant-scoped Delta tables.
 - Secrets and generated local data are ignored by git.
-
-Gold metrics are tracked in later Loom tickets under `.loom/tickets/`.
 
 ## Prerequisites
 
@@ -75,12 +74,14 @@ mkdir -p "$DAGSTER_HOME"
 uv run dagster dev -m kabuto_kurage.definitions
 ```
 
-Dagster will show four tenant-partitioned GitHub assets:
+Dagster will show six tenant-partitioned GitHub assets:
 
 - `github_bronze_repositories`
 - `github_bronze_pull_requests`
 - `github_silver_repositories`
 - `github_silver_pull_requests`
+- `github_gold_pr_throughput_daily`
+- `github_gold_pr_cycle_time`
 
 Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe local demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
 
@@ -105,7 +106,13 @@ Build GitHub silver models from existing bronze tables without Dagster:
 uv run python tools/build_github_silver.py --tenant sandbox
 ```
 
-Materialize the full GitHub bronze/silver asset graph from the CLI:
+Build GitHub gold metrics from existing silver tables without Dagster:
+
+```bash
+uv run python tools/build_github_gold.py --tenant sandbox
+```
+
+Materialize the full GitHub bronze/silver/gold asset graph from the CLI:
 
 ```bash
 export GITHUB_TOKEN=...
@@ -113,7 +120,7 @@ export KABUTO_GITHUB_MAX_REPOSITORIES=1
 uv run dagster asset materialize \
   -m kabuto_kurage.definitions \
   --partition sandbox \
-  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests
+  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 ```
 
 Run the stack validation proof from the previous milestone:
@@ -138,7 +145,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics. See `docs/github-silver-models.md` for silver table columns, intended use, and schema-evolution notes. See `docs/github-gold-metrics.md` for metric definitions, columns, and limitations. See `docs/dagster-asset-graph.md` for Dagster UI, tenant partitions, CLI materialization, and asset metadata.
 
 ## Project memory
 

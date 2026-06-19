@@ -45,6 +45,16 @@ uv run python tools/build_github_silver.py --tenant sandbox
 
 For temporary validation data roots, use the same `--data-root` used for bronze ingestion.
 
+## GitHub gold metrics
+
+After silver models exist:
+
+```bash
+uv run python tools/build_github_gold.py --tenant sandbox
+```
+
+For temporary validation data roots, use the same `--data-root` used for bronze and silver.
+
 ## Dagster
 
 ```bash
@@ -53,12 +63,14 @@ mkdir -p "$DAGSTER_HOME"
 uv run dagster dev -m kabuto_kurage.definitions
 ```
 
-The Dagster code location exposes four tenant-partitioned GitHub assets:
+The Dagster code location exposes six tenant-partitioned GitHub assets:
 
 - `github_bronze_repositories`
 - `github_bronze_pull_requests`
 - `github_silver_repositories`
 - `github_silver_pull_requests`
+- `github_gold_pr_throughput_daily`
+- `github_gold_pr_cycle_time`
 
 Set `GITHUB_TOKEN` or `GH_TOKEN`, choose a tenant partition such as `sandbox`, and materialize the graph from the UI. For safe demos, set `KABUTO_GITHUB_MAX_REPOSITORIES=1` before starting Dagster.
 
@@ -70,7 +82,7 @@ export KABUTO_GITHUB_MAX_REPOSITORIES=1
 uv run dagster asset materialize \
   -m kabuto_kurage.definitions \
   --partition sandbox \
-  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests
+  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
 ```
 
 See `docs/dagster-asset-graph.md` for asset metadata and graph details.

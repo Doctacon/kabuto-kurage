@@ -28,6 +28,12 @@ from kabuto_kurage.ingestion.github_bronze import (
 )
 from kabuto_kurage.paths import data_root, delta_table_path
 from kabuto_kurage.tenancy import load_tenant_registry, validate_tenant_id
+from kabuto_kurage.transforms.github_gold import (
+    PR_CYCLE_TIME_TABLE,
+    PR_THROUGHPUT_DAILY_TABLE,
+    GitHubGoldMetricResult,
+    materialize_tenant_github_gold,
+)
 from kabuto_kurage.transforms.github_silver import (
     GitHubSilverTransformResult,
     materialize_tenant_github_silver,
@@ -37,6 +43,8 @@ GITHUB_BRONZE_REPOSITORIES = "github_bronze_repositories"
 GITHUB_BRONZE_PULL_REQUESTS = "github_bronze_pull_requests"
 GITHUB_SILVER_REPOSITORIES = "github_silver_repositories"
 GITHUB_SILVER_PULL_REQUESTS = "github_silver_pull_requests"
+GITHUB_GOLD_PR_THROUGHPUT_DAILY = "github_gold_pr_throughput_daily"
+GITHUB_GOLD_PR_CYCLE_TIME = "github_gold_pr_cycle_time"
 GITHUB_MAX_REPOSITORIES_ENV = "KABUTO_GITHUB_MAX_REPOSITORIES"
 
 
@@ -159,6 +167,52 @@ def github_silver_assets(context: AssetExecutionContext) -> Iterable[Materialize
     )
 
 
+@multi_asset(
+    specs=[
+        _asset_spec(
+            GITHUB_GOLD_PR_THROUGHPUT_DAILY,
+            layer="gold",
+            resource_type=PR_THROUGHPUT_DAILY_TABLE,
+            description=(
+                "Daily GitHub pull-request opened/merged/closed counts by tenant and repository."
+            ),
+            deps=(GITHUB_SILVER_PULL_REQUESTS,),
+        ),
+        _asset_spec(
+            GITHUB_GOLD_PR_CYCLE_TIME,
+            layer="gold",
+            resource_type=PR_CYCLE_TIME_TABLE,
+            description="Per-pull-request open-to-merge cycle time derived from silver GitHub PRs.",
+            deps=(GITHUB_SILVER_PULL_REQUESTS,),
+        ),
+    ],
+    partitions_def=TENANT_PARTITIONS,
+)
+def github_gold_assets(context: AssetExecutionContext) -> Iterable[MaterializeResult[None]]:
+    """Build gold GitHub engineering metrics for one tenant partition."""
+
+    tenant_id = _tenant_id_from_context(context)
+    result = materialize_tenant_github_gold(tenant_id)
+    row_counts = {write.table_name: write.row_count for write in result.writes}
+
+    yield MaterializeResult(
+        asset_key=GITHUB_GOLD_PR_THROUGHPUT_DAILY,
+        metadata=_gold_metadata(
+            result,
+            resource_type=PR_THROUGHPUT_DAILY_TABLE,
+            row_count=row_counts[PR_THROUGHPUT_DAILY_TABLE],
+        ),
+    )
+    yield MaterializeResult(
+        asset_key=GITHUB_GOLD_PR_CYCLE_TIME,
+        metadata=_gold_metadata(
+            result,
+            resource_type=PR_CYCLE_TIME_TABLE,
+            row_count=row_counts[PR_CYCLE_TIME_TABLE],
+        ),
+    )
+
+
 github_assets_job = define_asset_job(
     name="github_assets_job",
     selection=[
@@ -166,6 +220,8 @@ github_assets_job = define_asset_job(
         GITHUB_BRONZE_PULL_REQUESTS,
         GITHUB_SILVER_REPOSITORIES,
         GITHUB_SILVER_PULL_REQUESTS,
+        GITHUB_GOLD_PR_THROUGHPUT_DAILY,
+        GITHUB_GOLD_PR_CYCLE_TIME,
     ],
 )
 
@@ -174,7 +230,7 @@ def github_definitions() -> Definitions:
     """Return the Dagster definitions for the GitHub asset graph."""
 
     return Definitions(
-        assets=[github_bronze_assets, github_silver_assets],
+        assets=[github_bronze_assets, github_silver_assets, github_gold_assets],
         jobs=[github_assets_job],
     )
 
@@ -242,6 +298,29 @@ def _silver_metadata(
         metadata["latest_ingestion_run_id"] = latest["ingestion_run_id"]
     if latest["fetched_at"]:
         metadata["latest_fetched_at"] = latest["fetched_at"]
+    return metadata
+
+
+def _gold_metadata(
+    result: GitHubGoldMetricResult,
+    *,
+    resource_type: str,
+    row_count: int,
+) -> dict[str, Any]:
+    table_path = delta_table_path(result.tenant_id, "gold", GITHUB_SOURCE, resource_type)
+    metadata = _common_metadata(
+        tenant_id=result.tenant_id,
+        layer="gold",
+        resource_type=resource_type,
+        table_path=table_path,
+        row_count=row_count,
+    )
+    if resource_type == PR_THROUGHPUT_DAILY_TABLE:
+        metadata["metric_grain"] = "tenant_repository_day"
+        metadata["metric_counts"] = "opened_count,merged_count,closed_count"
+    if resource_type == PR_CYCLE_TIME_TABLE:
+        metadata["metric_grain"] = "pull_request"
+        metadata["duration_unit"] = "hours_and_days"
     return metadata
 
 

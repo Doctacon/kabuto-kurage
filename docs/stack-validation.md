@@ -10,8 +10,9 @@ This note records the concrete local stack selected by ticket `.loom/tickets/202
 | Package/runtime management | `uv` | Project instructions prefer `uv` for Python. It gives fast, reproducible local environments and can run narrow validation commands without committing a full scaffold yet. |
 | GitHub ingestion/extraction | `dlt` REST helpers against GitHub REST API | Makes dlthub/dlt the required ingestion layer while still keeping pagination, headers, rate-limit handling, and API versions visible in the project wrapper. |
 | Delta Lake library | `deltalake` Python package (`delta-rs`) with `pyarrow` tables | Open-source, local-first, no Spark/JVM requirement for the early portfolio loop, and exposes real Delta transaction-log behavior. |
+| DuckDB query validation | `duckdb` with the `delta` extension and `delta_scan(...)` | Proves the planned query layer can read Delta tables through SQL before replacing Python in-memory filtering. |
 | Dagster integration | Dagster software-defined assets materialized locally | Matches the chosen first user-facing surface: Dagster UI. Assets can directly call ingestion/transformation functions and attach metadata such as row counts, paths, and freshness. |
-| Local storage | Local filesystem paths for Delta tables first | Lowest-friction proof of lakehouse semantics. MinIO/S3-compatible object storage can be added later when IaC/local-infrastructure tickets need object-store realism. |
+| Portable storage profiles | Local filesystem, MinIO, and Cloudflare R2 shapes | Local remains deterministic for tests; MinIO is the open-source S3-compatible profile; R2 is Chris's remote S3-compatible profile. |
 | Deterministic tests | Fixture-driven tests plus optional live GitHub validation | Real GitHub data is valuable for the portfolio demo, but deterministic tests should use committed fixtures/mocked HTTP responses so CI and local validation do not depend on tokens, rate limits, or mutable external state. |
 
 ## Validation Proof
@@ -19,15 +20,90 @@ This note records the concrete local stack selected by ticket `.loom/tickets/202
 Run the proof from the repository root:
 
 ```bash
-uv run --with deltalake --with pyarrow --with dagster --with dlt \
+uv run --with deltalake --with pyarrow --with dagster --with dlt --with duckdb \
   python tools/validate_stack.py
 ```
 
-The script validates three things:
+The script validates four things:
 
 1. Python can write and read a local Delta table via `deltalake`/`pyarrow`.
-2. GitHub API authentication works through dlt's REST client when `GITHUB_TOKEN` or `GH_TOKEN` is set; if no token is set, the script reports the setup gap without failing the local Delta/Dagster proofs.
-3. Dagster can materialize a toy asset that writes and reads the selected Delta storage approach.
+2. DuckDB can install/load the `delta` extension and query a fixture Delta table with `delta_scan(?)`.
+3. GitHub API authentication works through dlt's REST client when `GITHUB_TOKEN` or `GH_TOKEN` is set; if no token is set, the script reports the setup gap without failing the local Delta/Dagster proofs.
+4. Dagster can materialize a toy asset that writes and reads the selected Delta storage approach.
+
+## DuckDB Extension and Secret Requirements
+
+Local Delta query validation requires only DuckDB's Delta extension:
+
+```sql
+INSTALL delta;
+LOAD delta;
+SELECT * FROM delta_scan('/path/to/local/delta/table');
+```
+
+For S3-compatible object storage, DuckDB also needs object-store credentials. The exact production query module will centralize this later; this ticket documents the required shapes only.
+
+### MinIO placeholder shape
+
+Use DuckDB's S3 secret type against a local MinIO endpoint. Values below are placeholders and must live in ignored env/config, not committed files:
+
+```sql
+INSTALL httpfs;
+LOAD httpfs;
+INSTALL delta;
+LOAD delta;
+CREATE SECRET kabuto_minio (
+  TYPE s3,
+  KEY_ID 'KABUTO_MINIO_ACCESS_KEY_ID_PLACEHOLDER',
+  SECRET 'KABUTO_MINIO_SECRET_ACCESS_KEY_PLACEHOLDER',
+  ENDPOINT 'localhost:9000',
+  REGION 'us-east-1',
+  URL_STYLE 'path',
+  USE_SSL false
+);
+SELECT * FROM delta_scan('s3://KABUTO_MINIO_BUCKET_PLACEHOLDER/delta/table');
+```
+
+Delta writes to MinIO through delta-rs should use storage options equivalent to:
+
+```text
+AWS_ACCESS_KEY_ID=<from env>
+AWS_SECRET_ACCESS_KEY=<from env>
+AWS_ENDPOINT_URL=http://localhost:9000
+AWS_REGION=us-east-1
+allow_http=true
+aws_conditional_put=etag
+```
+
+### Cloudflare R2 placeholder shape
+
+Use DuckDB's R2 secret type for R2 paths. Values below are placeholders and must come from Proton Pass or another secret manager into environment variables or ignored local config:
+
+```sql
+INSTALL httpfs;
+LOAD httpfs;
+INSTALL delta;
+LOAD delta;
+CREATE SECRET kabuto_r2 (
+  TYPE r2,
+  KEY_ID 'KABUTO_R2_ACCESS_KEY_ID_PLACEHOLDER',
+  SECRET 'KABUTO_R2_SECRET_ACCESS_KEY_PLACEHOLDER',
+  ACCOUNT_ID 'KABUTO_R2_ACCOUNT_ID_PLACEHOLDER'
+);
+SELECT * FROM delta_scan('r2://KABUTO_R2_BUCKET_PLACEHOLDER/delta/table');
+```
+
+Delta writes to R2 through delta-rs should use storage options equivalent to:
+
+```text
+AWS_ACCESS_KEY_ID=<from env>
+AWS_SECRET_ACCESS_KEY=<from env>
+AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+AWS_REGION=auto
+aws_conditional_put=etag
+```
+
+Live R2 validation is intentionally optional. If `KABUTO_R2_*` credentials are absent, validation must skip remote checks rather than fail deterministic local tests.
 
 ## Fallbacks
 

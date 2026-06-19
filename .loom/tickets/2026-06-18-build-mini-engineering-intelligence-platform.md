@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-18
 Updated: 2026-06-18
 Parent: none
@@ -97,10 +97,41 @@ The parent plan can move to done when:
 - There is evidence showing tenant isolation validation.
 - README and architecture docs explain how the project maps to Jellyfish-relevant concepts.
 
+## Current State
+
+Done. The Dagster-centered mini engineering intelligence platform MVP is implemented and validated.
+
+Completed child tickets:
+
+- `.loom/tickets/2026-06-18-validate-delta-dagster-github-stack.md`
+- `.loom/tickets/2026-06-18-scaffold-portfolio-data-platform.md`
+- `.loom/tickets/2026-06-18-model-tenants-and-source-config.md`
+- `.loom/tickets/2026-06-18-ingest-github-to-bronze-delta.md`
+- `.loom/tickets/2026-06-18-build-silver-github-models.md`
+- `.loom/tickets/2026-06-18-add-dagster-asset-graph.md`
+- `.loom/tickets/2026-06-18-build-gold-engineering-metrics.md`
+- `.loom/tickets/2026-06-18-validate-tenant-isolation.md`
+- `.loom/tickets/2026-06-18-add-observability-and-freshness.md`
+- `.loom/tickets/2026-06-18-add-local-iac.md`
+- `.loom/tickets/2026-06-18-write-portfolio-architecture-docs.md`
+- `.loom/tickets/2026-06-18-plan-export-api-followup.md`
+
+Final evidence: `.loom/evidence/2026-06-18-final-mvp-validation.md`.
+
+The export/API follow-up was shaped as `.loom/tickets/2026-06-18-build-engineering-metrics-export-surface.md` and is intentionally blocked pending a product/operator decision to begin that new milestone.
+
+## Journal
+
+- 2026-06-18: Parent plan created from user-approved direction: portfolio project, Delta Lake early, GitHub API first, Dagster UI first.
+- 2026-06-18: Drained runnable child tickets in dependency order.
+- 2026-06-18: Recorded final validation evidence covering tests, lint, type checks, Terraform validation, and bounded live Dagster CLI materialization from GitHub ingestion through gold metrics.
+- 2026-06-18: Moved parent plan to done.
+
 ## Progress and Notes
 
 - 2026-06-18: Parent plan created from user-approved direction: portfolio project, Delta Lake early, GitHub API first, Dagster UI first.
+- 2026-06-18: Implemented MVP across stack validation, scaffold, tenancy, GitHub bronze, silver, Dagster assets, gold metrics, tenant isolation, observability, local IaC, and portfolio docs.
 
 ## Blockers
 
-- Exact Delta Lake Python/runtime choice is unresolved and assigned to child ticket `.loom/tickets/2026-06-18-validate-delta-dagster-github-stack.md`.
+None for the Dagster-centered MVP. Follow-up export/API implementation is blocked pending explicit selection of the new milestone.

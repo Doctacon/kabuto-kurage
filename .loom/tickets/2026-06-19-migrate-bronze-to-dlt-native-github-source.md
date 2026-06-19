@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-19-modernize-storage-ingestion-query-dev-workflow.md
@@ -34,10 +34,42 @@ Expected behavior:
 - Docs explain dlt schema/state artifacts and how to inspect them.
 - Full downstream test/lint/typecheck validation passes.
 
+## Current State
+
+Done. GitHub bronze ingestion now uses explicit dlt source/resource/schema/state concepts while preserving the existing tenant-scoped Delta bronze and downstream silver/gold/Dagster/REST/MCP contracts.
+
+Evidence: `.loom/evidence/2026-06-19-dlt-native-github-bronze-source-validation.md`.
+
+Review: `.loom/reviews/2026-06-19-dlt-native-github-bronze-source-review.md`.
+
+## Journal
+
+- 2026-06-19: Set active and delegated dlt-native GitHub bronze migration to worker.
+- 2026-06-19: Added dlt source `github_bronze` with dlt resources `repositories` and `pull_requests`.
+- 2026-06-19: Added dlt resource schema hints, source/resource state updates, and local schema/state inspection artifacts.
+- 2026-06-19: Preserved raw `payload_json`, tenant-scoped Delta bronze paths, overwrite behavior, rate-limit metadata, and downstream silver compatibility.
+- 2026-06-19: Updated ingestion/Dagster tests and docs.
+- 2026-06-19: Validated with focused ingestion/silver/isolation tests and full `pytest`/`ruff`/`mypy` suite.
+- 2026-06-19: Recorded evidence/review and moved ticket to done.
+
 ## Progress and Notes
 
-- Not started.
+- 2026-06-19: Implemented dlt-native source/resource construction in `src/kabuto_kurage/ingestion/github_bronze.py`.
+- 2026-06-19: Added `schema.json` and `state.json` local dlt inspection artifacts under `.local/data/dlt/github/{tenant_id}/`.
+- 2026-06-19: Updated `tests/test_github_bronze_ingestion.py` to prove dlt resource shape, artifact contents, pagination, rate-limit capture, no token leakage, and repeat-run behavior.
+- 2026-06-19: Updated `tests/test_dagster_assets.py` for the enriched ingestion result object.
+- 2026-06-19: Updated `docs/github-bronze-ingestion.md` with dlt source/resource/schema/state inspection guidance.
+
+## Results
+
+Acceptance criteria satisfied:
+
+- GitHub ingestion uses dlt source/resource/schema/state concepts directly.
+- Tests prove tenant isolation, pagination, rate-limit metadata, no token leakage, and repeat-run behavior.
+- Silver model tests pass unchanged.
+- Docs explain dlt schema/state artifacts and how to inspect them.
+- Full downstream test/lint/typecheck validation passes.
 
 ## Blockers
 
-- Requires storage profile conventions to avoid refactoring paths twice.
+None.

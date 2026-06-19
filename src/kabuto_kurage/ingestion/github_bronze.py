@@ -1,8 +1,8 @@
-"""GitHub REST API ingestion into tenant-scoped bronze Delta tables.
+"""dlt-native GitHub ingestion into tenant-scoped bronze Delta tables.
 
-This module intentionally keeps GitHub pagination, rate-limit headers, raw payloads,
-and Delta write semantics visible. That makes the first ingestion path useful as a
-learning artifact for third-party API integration and lakehouse bronze storage.
+This module defines explicit dlt source/resources for GitHub repositories and pull
+requests while keeping pagination, rate-limit headers, raw payloads, dlt schema/state
+artifacts, and Delta write semantics visible for learning.
 """
 
 from __future__ import annotations
@@ -17,9 +17,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import dlt
 import pyarrow as pa
 import requests
 from deltalake import write_deltalake
+from dlt.extract.source import DltSource
 from dlt.sources.helpers.rest_client.auth import BearerTokenAuth
 from dlt.sources.helpers.rest_client.client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import HeaderLinkPaginator
@@ -32,6 +34,8 @@ GITHUB_SOURCE = "github"
 REPOSITORY_RESOURCE = "repositories"
 PULL_REQUEST_RESOURCE = "pull_requests"
 DEFAULT_USER_AGENT = "kabuto-kurage-github-bronze-ingestion"
+DLT_BRONZE_SOURCE_NAME = "github_bronze"
+DLT_ARTIFACT_SCHEMA_VERSION = 1
 
 BRONZE_SCHEMA = pa.schema(
     [
@@ -49,6 +53,21 @@ BRONZE_SCHEMA = pa.schema(
         ("rate_limit_json", pa.string()),
     ]
 )
+
+DLT_BRONZE_COLUMNS: dict[str, dict[str, str]] = {
+    "tenant_id": {"data_type": "text"},
+    "source": {"data_type": "text"},
+    "resource_type": {"data_type": "text"},
+    "fetched_at": {"data_type": "timestamp"},
+    "source_id": {"data_type": "text"},
+    "source_owner": {"data_type": "text"},
+    "source_repo": {"data_type": "text"},
+    "source_url": {"data_type": "text"},
+    "api_url": {"data_type": "text"},
+    "ingestion_run_id": {"data_type": "text"},
+    "payload_json": {"data_type": "text"},
+    "rate_limit_json": {"data_type": "text"},
+}
 
 
 class GitHubIngestionError(RuntimeError):
@@ -103,6 +122,26 @@ class BronzeWriteResult:
 
 
 @dataclass(frozen=True)
+class DltArtifactResult:
+    """Local paths for dlt schema/state artifacts captured during ingestion."""
+
+    source_name: str
+    resource_names: tuple[str, ...]
+    schema_path: Path
+    state_path: Path
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly artifact summary without secret-bearing values."""
+
+        return {
+            "source_name": self.source_name,
+            "resource_names": list(self.resource_names),
+            "schema_path": str(self.schema_path),
+            "state_path": str(self.state_path),
+        }
+
+
+@dataclass(frozen=True)
 class GitHubBronzeIngestionResult:
     """Summary for a tenant GitHub bronze ingestion run."""
 
@@ -113,6 +152,7 @@ class GitHubBronzeIngestionResult:
     pull_request_count: int
     writes: tuple[BronzeWriteResult, ...]
     rate_limits: tuple[RateLimitSnapshot, ...]
+    dlt_artifacts: DltArtifactResult
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly summary without raw payloads or secrets."""
@@ -132,6 +172,123 @@ class GitHubBronzeIngestionResult:
                 for write in self.writes
             ],
             "rate_limits": [json.loads(rate_limit.to_json()) for rate_limit in self.rate_limits],
+            "dlt_artifacts": self.dlt_artifacts.as_dict(),
+        }
+
+
+class GitHubDltSourceContext:
+    """Shared dlt source/resource context for one tenant's GitHub bronze extraction."""
+
+    def __init__(
+        self,
+        *,
+        tenant: TenantConfig,
+        source_config: GitHubSourceConfig,
+        client: GitHubRestClient,
+        ingestion_run_id: str,
+        fetched_at: datetime,
+        max_repositories: int | None,
+    ) -> None:
+        self.tenant = tenant
+        self.source_config = source_config
+        self.client = client
+        self.ingestion_run_id = ingestion_run_id
+        self.fetched_at = fetched_at
+        self.max_repositories = max_repositories
+        self._repositories: list[dict[str, Any]] | None = None
+        self._repository_rate_limits: list[RateLimitSnapshot] = []
+        self._pull_requests: list[dict[str, Any]] | None = None
+        self._pull_request_rate_limits: list[RateLimitSnapshot] = []
+        self.resource_states: dict[str, dict[str, Any]] = {}
+
+    def repository_records(self) -> list[dict[str, Any]]:
+        """Return dlt resource rows for repositories while recording resource state."""
+
+        repositories, rate_limits = self._fetch_repositories()
+        latest_rate_limit = rate_limits[-1] if rate_limits else None
+        records = [
+            repository_payload_to_bronze_record(
+                tenant_id=self.tenant.tenant_id,
+                payload=repository,
+                fetched_at=self.fetched_at,
+                ingestion_run_id=self.ingestion_run_id,
+                rate_limit=latest_rate_limit,
+            )
+            for repository in repositories
+        ]
+        self._record_resource_state(
+            REPOSITORY_RESOURCE, row_count=len(records), rate_limits=rate_limits
+        )
+        return records
+
+    def pull_request_records(self) -> list[dict[str, Any]]:
+        """Return dlt resource rows for pull requests while recording resource state."""
+
+        pull_requests, rate_limits = self._fetch_pull_requests()
+        latest_rate_limit = rate_limits[-1] if rate_limits else None
+        records = [
+            pull_request_payload_to_bronze_record(
+                tenant_id=self.tenant.tenant_id,
+                payload=pull_request,
+                fetched_at=self.fetched_at,
+                ingestion_run_id=self.ingestion_run_id,
+                rate_limit=latest_rate_limit,
+            )
+            for pull_request in pull_requests
+        ]
+        self._record_resource_state(
+            PULL_REQUEST_RESOURCE, row_count=len(records), rate_limits=rate_limits
+        )
+        return records
+
+    def rate_limits(self) -> tuple[RateLimitSnapshot, ...]:
+        """Return all observed rate-limit snapshots in resource order."""
+
+        return tuple(self._repository_rate_limits + self._pull_request_rate_limits)
+
+    def source_state_snapshot(self) -> dict[str, Any]:
+        """Return a serializable dlt source-state snapshot for local inspection."""
+
+        return {
+            "schema_version": DLT_ARTIFACT_SCHEMA_VERSION,
+            "source_name": DLT_BRONZE_SOURCE_NAME,
+            "tenant_id": self.tenant.tenant_id,
+            "source": GITHUB_SOURCE,
+            "ingestion_run_id": self.ingestion_run_id,
+            "fetched_at": self.fetched_at.isoformat(),
+            "resources": self.resource_states,
+        }
+
+    def _fetch_repositories(self) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
+        if self._repositories is None:
+            repositories, rate_limits = fetch_configured_repositories(
+                self.client, self.source_config, max_repositories=self.max_repositories
+            )
+            self._repositories = repositories
+            self._repository_rate_limits = rate_limits
+        return self._repositories, self._repository_rate_limits
+
+    def _fetch_pull_requests(self) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
+        if self._pull_requests is None:
+            repositories, _rate_limits = self._fetch_repositories()
+            pull_requests, rate_limits = fetch_pull_requests_for_repositories(
+                self.client, repositories
+            )
+            self._pull_requests = pull_requests
+            self._pull_request_rate_limits = rate_limits
+        return self._pull_requests, self._pull_request_rate_limits
+
+    def _record_resource_state(
+        self, resource_type: str, *, row_count: int, rate_limits: Sequence[RateLimitSnapshot]
+    ) -> None:
+        latest_rate_limit = rate_limits[-1] if rate_limits else None
+        self.resource_states[resource_type] = {
+            "resource_type": resource_type,
+            "write_disposition": "replace",
+            "row_count": row_count,
+            "latest_rate_limit": (
+                json.loads(latest_rate_limit.to_json()) if latest_rate_limit else None
+            ),
         }
 
 
@@ -204,6 +361,7 @@ class GitHubRestClient:
         """Return the dlt extraction primitives used by this client for validation/docs."""
 
         return {
+            "source": DLT_BRONZE_SOURCE_NAME,
             "client": type(self._rest_client).__name__,
             "paginator": type(self._rest_client.paginator).__name__,
         }
@@ -215,6 +373,58 @@ class GitHubRestClient:
         self.close()
 
 
+def build_github_bronze_dlt_source(context: GitHubDltSourceContext) -> DltSource:
+    """Build the explicit dlt source/resources for one tenant GitHub bronze run."""
+
+    @dlt.resource(  # type: ignore[call-overload,untyped-decorator]
+        name=REPOSITORY_RESOURCE,
+        table_name=REPOSITORY_RESOURCE,
+        write_disposition="replace",
+        columns=DLT_BRONZE_COLUMNS,
+        primary_key="source_id",
+    )
+    def repositories() -> Iterable[dict[str, Any]]:
+        records = context.repository_records()
+        _update_dlt_state(context, REPOSITORY_RESOURCE)
+        yield from records
+
+    @dlt.resource(  # type: ignore[call-overload,untyped-decorator]
+        name=PULL_REQUEST_RESOURCE,
+        table_name=PULL_REQUEST_RESOURCE,
+        write_disposition="replace",
+        columns=DLT_BRONZE_COLUMNS,
+        primary_key="source_id",
+    )
+    def pull_requests() -> Iterable[dict[str, Any]]:
+        records = context.pull_request_records()
+        _update_dlt_state(context, PULL_REQUEST_RESOURCE)
+        yield from records
+
+    @dlt.source(name=DLT_BRONZE_SOURCE_NAME, schema_contract="evolve")
+    def github_bronze() -> tuple[Any, Any]:
+        return repositories, pull_requests
+
+    return github_bronze()
+
+
+def _update_dlt_state(context: GitHubDltSourceContext, resource_type: str) -> None:
+    """Update dlt source/resource state for visibility during extraction."""
+
+    resource_state = context.resource_states[resource_type]
+    dlt.current.resource_state().update(resource_state)
+    source_state = dlt.current.source_state()
+    source_state.update(
+        {
+            "source_name": DLT_BRONZE_SOURCE_NAME,
+            "tenant_id": context.tenant.tenant_id,
+            "source": GITHUB_SOURCE,
+            "ingestion_run_id": context.ingestion_run_id,
+            "fetched_at": context.fetched_at.isoformat(),
+        }
+    )
+    source_state.setdefault("resources", {})[resource_type] = resource_state
+
+
 def ingest_tenant_github_to_bronze(
     tenant: TenantConfig,
     *,
@@ -224,11 +434,11 @@ def ingest_tenant_github_to_bronze(
     client: GitHubRestClient | None = None,
     max_repositories: int | None = None,
 ) -> GitHubBronzeIngestionResult:
-    """Ingest one configured tenant's GitHub repositories and pull requests to bronze Delta.
+    """Ingest one configured tenant's dlt GitHub source to bronze Delta.
 
     Bronze tables are overwritten per tenant/resource. For this first batch-style source,
-    overwrite semantics make repeated runs idempotent for the configured scope while the
-    raw payload and run metadata remain visible in every row.
+    overwrite semantics make repeated runs idempotent for the configured scope while raw
+    payloads, run metadata, and dlt schema/state artifacts remain visible.
     """
 
     run_id = ingestion_run_id or str(uuid.uuid4())
@@ -241,37 +451,22 @@ def ingest_tenant_github_to_bronze(
         token=github_token,
     )
 
+    context = GitHubDltSourceContext(
+        tenant=tenant,
+        source_config=source_config,
+        client=github,
+        ingestion_run_id=run_id,
+        fetched_at=run_fetched_at,
+        max_repositories=max_repositories,
+    )
+    dlt_source = build_github_bronze_dlt_source(context)
+
     try:
-        repositories, repository_rate_limits = fetch_configured_repositories(
-            github, source_config, max_repositories=max_repositories
-        )
-        pull_requests, pull_request_rate_limits = fetch_pull_requests_for_repositories(
-            github, repositories
-        )
+        repository_records = list(dlt_source.resources[REPOSITORY_RESOURCE])
+        pull_request_records = list(dlt_source.resources[PULL_REQUEST_RESOURCE])
     finally:
         if owned_client:
             github.close()
-
-    repository_records = [
-        repository_payload_to_bronze_record(
-            tenant_id=tenant.tenant_id,
-            payload=repository,
-            fetched_at=run_fetched_at,
-            ingestion_run_id=run_id,
-            rate_limit=repository_rate_limits[-1] if repository_rate_limits else None,
-        )
-        for repository in repositories
-    ]
-    pull_request_records = [
-        pull_request_payload_to_bronze_record(
-            tenant_id=tenant.tenant_id,
-            payload=pull_request,
-            fetched_at=run_fetched_at,
-            ingestion_run_id=run_id,
-            rate_limit=pull_request_rate_limits[-1] if pull_request_rate_limits else None,
-        )
-        for pull_request in pull_requests
-    ]
 
     repository_path = delta_table_path(
         tenant.tenant_id, "bronze", GITHUB_SOURCE, REPOSITORY_RESOURCE
@@ -281,6 +476,7 @@ def ingest_tenant_github_to_bronze(
     )
     write_bronze_records(repository_path, repository_records)
     write_bronze_records(pull_request_path, pull_request_records)
+    dlt_artifacts = write_dlt_artifacts(tenant.tenant_id, dlt_source, context)
 
     return GitHubBronzeIngestionResult(
         tenant_id=tenant.tenant_id,
@@ -292,8 +488,50 @@ def ingest_tenant_github_to_bronze(
             BronzeWriteResult(REPOSITORY_RESOURCE, repository_path, len(repository_records)),
             BronzeWriteResult(PULL_REQUEST_RESOURCE, pull_request_path, len(pull_request_records)),
         ),
-        rate_limits=tuple(repository_rate_limits + pull_request_rate_limits),
+        rate_limits=context.rate_limits(),
+        dlt_artifacts=dlt_artifacts,
     )
+
+
+def write_dlt_artifacts(
+    tenant_id: str, dlt_source: DltSource, context: GitHubDltSourceContext
+) -> DltArtifactResult:
+    """Write local dlt schema/state artifacts for one bronze ingestion run."""
+
+    artifact_root = _dlt_artifact_root(tenant_id)
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    schema_path = artifact_root / "schema.json"
+    state_path = artifact_root / "state.json"
+    schema_path.write_text(
+        json.dumps(_dlt_schema_artifact(dlt_source), indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    state_path.write_text(
+        json.dumps(context.source_state_snapshot(), indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    return DltArtifactResult(
+        source_name=DLT_BRONZE_SOURCE_NAME,
+        resource_names=(REPOSITORY_RESOURCE, PULL_REQUEST_RESOURCE),
+        schema_path=schema_path,
+        state_path=state_path,
+    )
+
+
+def _dlt_schema_artifact(dlt_source: DltSource) -> dict[str, Any]:
+    return {
+        "schema_version": DLT_ARTIFACT_SCHEMA_VERSION,
+        "source_name": dlt_source.name,
+        "source_schema": dlt_source.schema.to_dict(),
+        "resource_schemas": {
+            resource_name: dlt_source.resources[resource_name].compute_table_schema()
+            for resource_name in (REPOSITORY_RESOURCE, PULL_REQUEST_RESOURCE)
+        },
+    }
+
+
+def _dlt_artifact_root(tenant_id: str) -> Path:
+    return data_root() / "dlt" / GITHUB_SOURCE / tenant_id
 
 
 def fetch_configured_repositories(

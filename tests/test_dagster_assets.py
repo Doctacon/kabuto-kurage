@@ -10,7 +10,9 @@ from deltalake import DeltaTable
 import kabuto_kurage.assets.github as github_assets
 from kabuto_kurage.definitions import defs
 from kabuto_kurage.ingestion.github_bronze import (
+    DLT_BRONZE_SOURCE_NAME,
     BronzeWriteResult,
+    DltArtifactResult,
     GitHubBronzeIngestionResult,
     RateLimitSnapshot,
     pull_request_payload_to_bronze_record,
@@ -149,6 +151,12 @@ def test_github_asset_graph_materializes_bronze_silver_and_gold_without_live_git
             rate_limits=(
                 RateLimitSnapshot(5000, 4999, 1, 1781800000, "core"),
                 RateLimitSnapshot(5000, 4998, 2, 1781800000, "core"),
+            ),
+            dlt_artifacts=DltArtifactResult(
+                source_name=DLT_BRONZE_SOURCE_NAME,
+                resource_names=("repositories", "pull_requests"),
+                schema_path=tmp_path / "dlt" / "github" / tenant_id / "schema.json",
+                state_path=tmp_path / "dlt" / "github" / tenant_id / "state.json",
             ),
         )
 

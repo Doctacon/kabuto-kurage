@@ -14,8 +14,11 @@ from requests.adapters import BaseAdapter
 from requests.models import PreparedRequest
 
 from kabuto_kurage.ingestion.github_bronze import (
+    DLT_BRONZE_SOURCE_NAME,
+    GitHubDltSourceContext,
     GitHubRestClient,
     RateLimitSnapshot,
+    build_github_bronze_dlt_source,
     ingest_tenant_github_to_bronze,
     pull_request_payload_to_bronze_record,
     repository_payload_to_bronze_record,
@@ -171,11 +174,40 @@ def test_github_client_uses_dlt_rest_client_and_header_link_paginator() -> None:
 
     try:
         assert client.dlt_backend_summary() == {
+            "source": DLT_BRONZE_SOURCE_NAME,
             "client": RESTClient.__name__,
             "paginator": HeaderLinkPaginator.__name__,
         }
     finally:
         client.close()
+
+
+def test_github_bronze_source_exposes_explicit_dlt_resources() -> None:
+    session = github_session(lambda request: response(request, []))
+    try:
+        client = GitHubRestClient(
+            api_base_url="https://api.github.test", token="fake-token", session=session
+        )
+        context = GitHubDltSourceContext(
+            tenant=tenant_config(),
+            source_config=tenant_config().github,
+            client=client,
+            ingestion_run_id="run-source",
+            fetched_at=FETCHED_AT,
+            max_repositories=1,
+        )
+        source = build_github_bronze_dlt_source(context)
+    finally:
+        session.close()
+
+    assert source.name == DLT_BRONZE_SOURCE_NAME
+    assert sorted(source.resources.keys()) == ["pull_requests", "repositories"]
+    repository_schema = source.resources["repositories"].compute_table_schema()
+    pull_request_schema = source.resources["pull_requests"].compute_table_schema()
+    assert repository_schema["write_disposition"] == "replace"
+    assert pull_request_schema["write_disposition"] == "replace"
+    assert repository_schema["columns"]["tenant_id"]["data_type"] == "text"
+    assert pull_request_schema["columns"]["payload_json"]["data_type"] == "text"
 
 
 def test_github_client_follows_dlt_pagination_and_captures_rate_limits() -> None:
@@ -227,7 +259,10 @@ def test_ingest_tenant_github_to_bronze_writes_idempotent_delta_tables(
             )
         raise AssertionError(f"Unexpected request: {request.url}")
 
+    latest_result = None
+
     def run_ingestion(run_id: str) -> None:
+        nonlocal latest_result
         session = github_session(handler)
         try:
             client = GitHubRestClient(
@@ -242,9 +277,14 @@ def test_ingest_tenant_github_to_bronze_writes_idempotent_delta_tables(
             )
         finally:
             session.close()
+        latest_result = result
         assert result.repository_count == 1
         assert result.pull_request_count == 1
         assert len(result.rate_limits) == 3
+        assert result.dlt_artifacts.source_name == DLT_BRONZE_SOURCE_NAME
+        assert set(result.dlt_artifacts.resource_names) == {"repositories", "pull_requests"}
+        assert result.dlt_artifacts.schema_path.exists()
+        assert result.dlt_artifacts.state_path.exists()
         assert "fake-token" not in json.dumps(result.as_dict())
 
     run_ingestion("run-one")
@@ -264,6 +304,19 @@ def test_ingest_tenant_github_to_bronze_writes_idempotent_delta_tables(
     assert json.loads(pull_request_rows[0]["rate_limit_json"])["remaining"] == 4996
     assert "fake-token" not in json.dumps(repository_rows, default=str)
     assert "fake-token" not in json.dumps(pull_request_rows, default=str)
+    assert latest_result is not None
+    dlt_schema = json.loads(latest_result.dlt_artifacts.schema_path.read_text(encoding="utf-8"))
+    dlt_state = json.loads(latest_result.dlt_artifacts.state_path.read_text(encoding="utf-8"))
+    assert set(dlt_state["resources"]) == {"repositories", "pull_requests"}
+    assert dlt_state["resources"]["repositories"]["row_count"] == 1
+    assert dlt_state["resources"]["pull_requests"]["latest_rate_limit"]["remaining"] == 4996
+    assert set(dlt_schema["resource_schemas"]) == {"repositories", "pull_requests"}
+    assert dlt_schema["resource_schemas"]["repositories"]["write_disposition"] == "replace"
+    assert dlt_schema["resource_schemas"]["pull_requests"]["columns"]["payload_json"][
+        "data_type"
+    ] == "text"
+    assert "fake-token" not in json.dumps(dlt_schema)
+    assert "fake-token" not in json.dumps(dlt_state)
     assert (repositories_path / "_delta_log").exists()
     assert (pull_requests_path / "_delta_log").exists()
     assert request_counts["/users/octocat/repos"] == 2

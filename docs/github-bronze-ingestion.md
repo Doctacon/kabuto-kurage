@@ -1,6 +1,6 @@
 # GitHub Bronze Ingestion
 
-This milestone adds the first real ingestion path: GitHub REST API data extracted with dlt into tenant-scoped bronze Delta tables.
+This milestone adds the first real ingestion path: GitHub REST API data extracted through explicit dlt source/resources into tenant-scoped bronze Delta tables.
 
 ## What It Ingests
 
@@ -9,7 +9,7 @@ Initial resources:
 - GitHub repositories
 - GitHub pull requests
 
-The ingestion uses dlt REST helpers plus tenant/source config from `config/tenants.example.yaml` or the path configured by `KABUTO_TENANTS_CONFIG`.
+The ingestion uses a dlt source named `github_bronze` with dlt resources named `repositories` and `pull_requests`, plus tenant/source config from `config/tenants.example.yaml` or the path configured by `KABUTO_TENANTS_CONFIG`.
 
 For each tenant, the GitHub source can specify:
 
@@ -83,9 +83,19 @@ Each row includes:
 
 `payload_json` is intentionally retained so later schema-evolution exercises can inspect raw source fields that are not yet modeled in silver tables.
 
-## dlt Extraction, Pagination, and Rate Limits
+## dlt Source, Resources, Schema, State, and Rate Limits
 
-The GitHub client uses dlt's `RESTClient` with `HeaderLinkPaginator` for API extraction. It follows GitHub/RFC 5988-style `Link` headers and continues while a `rel="next"` URL is present.
+GitHub bronze ingestion is represented as an explicit dlt source/resource graph:
+
+| dlt concept | Project value | Purpose |
+| --- | --- | --- |
+| Source | `github_bronze` | One tenant-scoped GitHub bronze extraction run. |
+| Resource | `repositories` | Configured owner/discovered repositories plus explicit repositories. |
+| Resource | `pull_requests` | Pull requests for the final repository set. |
+| Write disposition | `replace` | Mirrors the per-tenant/resource overwrite semantics used by the local Delta tables. |
+| Primary key hint | `source_id` | Stable GitHub `node_id`, falling back to `id` or URL. |
+
+The resources use dlt's `RESTClient` with `HeaderLinkPaginator` for API extraction. It follows GitHub/RFC 5988-style `Link` headers and continues while a `rel="next"` URL is present.
 
 For each response, ingestion captures these headers when available:
 
@@ -95,7 +105,23 @@ For each response, ingestion captures these headers when available:
 - `x-ratelimit-reset`
 - `x-ratelimit-resource`
 
-If GitHub returns an HTTP error, ingestion raises `GitHubIngestionError`. If a `403` or `429` response has zero remaining requests, the error message identifies likely rate-limit exhaustion. dlt owns the REST extraction/pagination mechanics; the project wrapper preserves the existing bronze schema and metadata contract.
+During resource iteration, ingestion updates dlt source/resource state with tenant ID, ingestion run ID, fetched timestamp, row counts, write disposition, and latest rate-limit snapshot. After a run, local dlt inspection artifacts are written under:
+
+```text
+.local/data/dlt/github/{tenant_id}/schema.json
+.local/data/dlt/github/{tenant_id}/state.json
+```
+
+Use these files to inspect the dlt source/resource schema hints and state snapshot without exposing secrets:
+
+```bash
+jq '.resource_schemas.repositories' .local/data/dlt/github/sandbox/schema.json
+jq '.resources.pull_requests' .local/data/dlt/github/sandbox/state.json
+```
+
+`schema.json` includes dlt resource schemas for `repositories` and `pull_requests`, including column hints, `source_id` primary key hints, and `replace` write disposition. `state.json` includes the latest run/resource state and rate-limit snapshots. Neither file stores GitHub token values.
+
+If GitHub returns an HTTP error, ingestion raises `GitHubIngestionError`. If a `403` or `429` response has zero remaining requests, the error message identifies likely rate-limit exhaustion. dlt owns the source/resource and REST extraction/pagination mechanics; the project preserves tenant-scoped Delta bronze tables as the downstream compatibility contract.
 
 ## Idempotency Semantics
 
@@ -104,7 +130,7 @@ This first bronze path uses per-tenant/resource **overwrite** writes:
 - `repositories` is overwritten for the tenant's configured repository scope.
 - `pull_requests` is overwritten for the repositories processed in the run.
 
-That keeps repeated local runs idempotent for the configured scope and avoids duplicate raw rows while preserving raw payloads and run metadata in the latest table snapshot. Historical run retention can be introduced later if the project needs immutable append-only bronze history.
+That keeps repeated local runs idempotent for the configured scope and avoids duplicate raw rows while preserving raw payloads, run metadata, and dlt schema/state artifacts for the latest extraction. Historical run retention can be introduced later if the project needs immutable append-only bronze history.
 
 ## Failure Behavior
 

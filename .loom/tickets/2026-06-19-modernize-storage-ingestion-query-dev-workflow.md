@@ -1,4 +1,4 @@
-Status: open
+Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: none
@@ -71,10 +71,43 @@ The parent plan can move to done when:
 - Evidence exists for stack validation and final milestone validation.
 - Docs make the new architecture understandable to a portfolio reviewer.
 
+## Current State
+
+Done. The portable dlt + DuckDB + Taskfile modernization milestone is implemented and validated.
+
+Completed child tickets:
+
+- `.loom/tickets/2026-06-19-validate-portable-storage-duckdb-dlt-stack.md`
+- `.loom/tickets/2026-06-19-add-storage-profiles-and-secret-conventions.md`
+- `.loom/tickets/2026-06-19-migrate-bronze-to-dlt-native-github-source.md`
+- `.loom/tickets/2026-06-19-query-gold-metrics-with-duckdb.md`
+- `.loom/tickets/2026-06-19-add-taskfile-developer-workflow.md`
+- `.loom/tickets/2026-06-19-update-modernized-portfolio-docs.md`
+
+Final evidence: `.loom/evidence/2026-06-19-modernization-final-validation.md`.
+
+## Journal
+
+- 2026-06-19: Created from user-approved shaping choices: portable storage profiles, dlt-native bronze, DuckDB query layer now, and Taskfile workflow.
+- 2026-06-19: User approved executing the plan via `/loom-driver`.
+- 2026-06-19: Completed stack validation, storage profiles, dlt-native bronze migration, DuckDB query migration, Taskfile workflow, and final docs update.
+- 2026-06-19: Recorded final validation and moved parent plan to done.
+
 ## Progress and Notes
 
 - 2026-06-19: Created from user-approved shaping choices: portable storage profiles, dlt-native bronze, DuckDB query layer now, and Taskfile workflow.
+- 2026-06-19: Final validation passed with `84 passed`, `ruff` clean, and `mypy` clean.
+
+## Results
+
+Acceptance criteria satisfied:
+
+- All child tickets are done.
+- `.loom/specs/portable-dlt-duckdb-lakehouse-workflow.md` acceptance criteria are represented by code, tests, docs, and evidence.
+- Full validation passed: `uv run pytest`, `uv run ruff check .`, `uv run mypy src`.
+- Evidence exists for stack validation and final milestone validation.
+- README/docs explain the modernized architecture for portfolio review.
 
 ## Blockers
 
-- Implementation should not start until the user approves executing this plan.
+None.

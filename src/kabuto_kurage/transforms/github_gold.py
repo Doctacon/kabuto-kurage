@@ -100,9 +100,27 @@ def materialize_tenant_github_gold(tenant_id: str) -> GitHubGoldMetricResult:
 
     safe_tenant_id = validate_tenant_id(tenant_id)
     pull_request_rows = _read_silver_pull_request_rows(safe_tenant_id)
+    _validate_rows_belong_to_tenant(
+        pull_request_rows,
+        safe_tenant_id,
+        layer="silver",
+        table_name=PULL_REQUEST_RESOURCE,
+    )
 
     throughput_rows = compute_pr_throughput_daily(pull_request_rows)
     cycle_time_rows = compute_pr_cycle_time(pull_request_rows)
+    _validate_rows_belong_to_tenant(
+        throughput_rows,
+        safe_tenant_id,
+        layer="gold",
+        table_name=PR_THROUGHPUT_DAILY_TABLE,
+    )
+    _validate_rows_belong_to_tenant(
+        cycle_time_rows,
+        safe_tenant_id,
+        layer="gold",
+        table_name=PR_CYCLE_TIME_TABLE,
+    )
 
     throughput_path = delta_table_path(
         safe_tenant_id, "gold", GITHUB_SOURCE, PR_THROUGHPUT_DAILY_TABLE
@@ -240,6 +258,23 @@ def _read_silver_pull_request_rows(tenant_id: str) -> list[dict[str, Any]]:
         )
     rows = DeltaTable(str(table_path)).to_pyarrow_table().to_pylist()
     return cast(list[dict[str, Any]], rows)
+
+
+def _validate_rows_belong_to_tenant(
+    rows: Sequence[Mapping[str, Any]],
+    tenant_id: str,
+    *,
+    layer: str,
+    table_name: str,
+) -> None:
+    mismatched_tenant_ids = sorted(
+        {str(row.get("tenant_id")) for row in rows if row.get("tenant_id") != tenant_id}
+    )
+    if mismatched_tenant_ids:
+        raise GitHubGoldMetricError(
+            f"Refusing to materialize tenant {tenant_id} {layer}/{table_name}: "
+            f"found rows for tenant_id values {mismatched_tenant_ids}"
+        )
 
 
 def _write_gold_records(

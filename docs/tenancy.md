@@ -81,6 +81,22 @@ Examples:
 
 This path convention intentionally duplicates `tenant_id` in storage even though later records will also carry `tenant_id` as a column. That redundancy makes local inspection easier and creates a clear guardrail for future ingestion and transformation tickets.
 
+## Validation Guardrails
+
+Automated tests exercise tenant isolation with distinct two-tenant fixture data across bronze, silver, and gold layers. The expected invariant is:
+
+```text
+path tenant_id == every row tenant_id == requested materialization tenant_id
+```
+
+Silver and gold materializers now fail closed if a tenant-scoped Delta path contains rows for a different tenant. This protects against local development mistakes such as writing `personal` rows into the `sandbox` path before building downstream tables.
+
+The validation is intentionally local and logical:
+
+- It proves this project's ingestion/transformation code preserves tenant IDs and reads tenant-scoped paths.
+- It proves tenant-scoped gold metrics exclude the other fixture tenant's repositories and PR numbers.
+- It does **not** provide production authentication, authorization, encryption, row-level security, audit controls, or compute/network isolation.
+
 ## Alternatives Considered
 
 ### Database per tenant

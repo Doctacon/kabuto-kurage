@@ -131,11 +131,34 @@ def materialize_tenant_github_silver(tenant_id: str) -> GitHubSilverTransformRes
 
     safe_tenant_id = validate_tenant_id(tenant_id)
 
-    repository_records = transform_repository_bronze_rows(
-        _read_bronze_rows(safe_tenant_id, REPOSITORY_RESOURCE)
+    repository_bronze_rows = _read_bronze_rows(safe_tenant_id, REPOSITORY_RESOURCE)
+    pull_request_bronze_rows = _read_bronze_rows(safe_tenant_id, PULL_REQUEST_RESOURCE)
+    _validate_rows_belong_to_tenant(
+        repository_bronze_rows,
+        safe_tenant_id,
+        layer="bronze",
+        table_name=REPOSITORY_RESOURCE,
     )
-    pull_request_records = transform_pull_request_bronze_rows(
-        _read_bronze_rows(safe_tenant_id, PULL_REQUEST_RESOURCE)
+    _validate_rows_belong_to_tenant(
+        pull_request_bronze_rows,
+        safe_tenant_id,
+        layer="bronze",
+        table_name=PULL_REQUEST_RESOURCE,
+    )
+
+    repository_records = transform_repository_bronze_rows(repository_bronze_rows)
+    pull_request_records = transform_pull_request_bronze_rows(pull_request_bronze_rows)
+    _validate_rows_belong_to_tenant(
+        repository_records,
+        safe_tenant_id,
+        layer="silver",
+        table_name=REPOSITORY_RESOURCE,
+    )
+    _validate_rows_belong_to_tenant(
+        pull_request_records,
+        safe_tenant_id,
+        layer="silver",
+        table_name=PULL_REQUEST_RESOURCE,
     )
 
     repositories_path = delta_table_path(
@@ -266,6 +289,23 @@ def _read_bronze_rows(tenant_id: str, resource_type: str) -> list[dict[str, Any]
         )
     rows = DeltaTable(str(table_path)).to_pyarrow_table().to_pylist()
     return cast(list[dict[str, Any]], rows)
+
+
+def _validate_rows_belong_to_tenant(
+    rows: Sequence[Mapping[str, Any]],
+    tenant_id: str,
+    *,
+    layer: str,
+    table_name: str,
+) -> None:
+    mismatched_tenant_ids = sorted(
+        {str(row.get("tenant_id")) for row in rows if row.get("tenant_id") != tenant_id}
+    )
+    if mismatched_tenant_ids:
+        raise GitHubSilverTransformError(
+            f"Refusing to materialize tenant {tenant_id} {layer}/{table_name}: "
+            f"found rows for tenant_id values {mismatched_tenant_ids}"
+        )
 
 
 def _write_silver_records(

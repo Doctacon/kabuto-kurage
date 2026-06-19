@@ -2,7 +2,7 @@ Status: done
 Created: 2026-06-19
 Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-18-build-mini-engineering-intelligence-platform.md
-Depends-On: .loom/decisions/use-dlt-for-github-ingestion.md, .loom/tickets/2026-06-18-ingest-github-to-bronze-delta.md
+Depends-On: .loom/decisions/superseded/use-dlt-for-github-ingestion.md, .loom/tickets/2026-06-18-ingest-github-to-bronze-delta.md
 
 # Migrate GitHub Bronze Ingestion to dlt
 
@@ -38,7 +38,7 @@ In scope:
 ## Progress and Notes
 
 - 2026-06-19: User clarified dlt is mandatory for ingestion.
-- 2026-06-19: Created decision `.loom/decisions/use-dlt-for-github-ingestion.md` and this migration ticket.
+- 2026-06-19: Created decision `.loom/decisions/superseded/use-dlt-for-github-ingestion.md` and this migration ticket.
 - 2026-06-19: Added `dlt>=1.28.0` as a runtime dependency.
 - 2026-06-19: Refactored `GitHubRestClient` to use dlt `RESTClient`, `BearerTokenAuth`, and `HeaderLinkPaginator` for GitHub extraction/pagination.
 - 2026-06-19: Preserved existing bronze Delta schema, tenant-scoped table paths, overwrite semantics, rate-limit metadata, result object shape, and CLI behavior.

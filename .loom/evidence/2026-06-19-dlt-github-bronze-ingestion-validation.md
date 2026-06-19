@@ -1,7 +1,7 @@
 Status: recorded
 Created: 2026-06-19
 Updated: 2026-06-19
-Relates-To: .loom/tickets/2026-06-19-migrate-github-bronze-ingestion-to-dlt.md, .loom/decisions/use-dlt-for-github-ingestion.md
+Relates-To: .loom/tickets/2026-06-19-migrate-github-bronze-ingestion-to-dlt.md, .loom/decisions/superseded/use-dlt-for-github-ingestion.md
 
 # dlt GitHub Bronze Ingestion Validation
 

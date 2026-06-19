@@ -1,8 +1,10 @@
-Status: active
+Status: superseded
 Created: 2026-06-19
 Updated: 2026-06-19
 
 # Use dlt for GitHub Ingestion
+
+Superseded-By: `.loom/decisions/portable-dlt-duckdb-taskfile-modernization.md`
 
 ## Context
 

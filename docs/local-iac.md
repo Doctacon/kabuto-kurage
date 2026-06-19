@@ -51,7 +51,7 @@ Storage profile conventions are implemented in `kabuto_kurage.paths`:
 | `minio` | `KABUTO_STORAGE_PROFILE=minio` | Open-source S3-compatible local object-store profile; credentials come from `KABUTO_MINIO_*` env vars. |
 | `r2` | `KABUTO_STORAGE_PROFILE=r2` | Cloudflare R2 remote profile; credentials come from `KABUTO_R2_*` env vars. |
 
-This IaC milestone still uses Terraform's local provider only. A later implementation may add MinIO to Docker Compose, but tests must not require live MinIO or R2 credentials.
+This IaC milestone still uses Terraform's local provider only. Storage profile code can resolve MinIO/R2 URIs and engine options, but this local IaC does not yet provision MinIO buckets, R2 buckets, or object-store credentials. Tests must not require live MinIO or R2 credentials.
 
 ## Prepare Local Runtime Files
 
@@ -110,7 +110,13 @@ docker-compose --env-file .local/runtime/kabuto.env -f iac/local/docker-compose.
 
 ## Validation
 
-Static validation that does not require Docker daemon:
+Static validation that does not require Docker daemon starts with the primary project task:
+
+```bash
+task validate
+```
+
+IaC-specific checks:
 
 ```bash
 terraform -chdir=iac/local fmt -check

@@ -8,10 +8,14 @@ It demonstrates a small but coherent data platform:
 
 ```text
 GitHub API
-  └─ dlt REST extraction for repos + pull requests, pagination, rate-limit metadata
+  └─ dlt source/resources for repos + pull requests, pagination, rate-limit metadata
       ▼
 Bronze Delta Lake
-  └─ tenant-scoped raw payload_json + ingestion metadata
+  └─ tenant-scoped raw payload_json + dlt schema/state + ingestion metadata
+      │
+      ├─ storage profile: local filesystem (default)
+      ├─ storage profile: MinIO S3-compatible local object store
+      └─ storage profile: Cloudflare R2 S3-compatible remote object store
       ▼
 Silver Delta Lake
   └─ typed repository and pull-request models
@@ -29,13 +33,14 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 
 ## What a reviewer should notice in five minutes
 
-- **Third-party integration:** real GitHub REST API ingestion using dlt REST helpers, with explicit pagination and rate-limit capture.
-- **Lakehouse layers:** bronze raw payloads, silver typed models, and gold metric tables stored as local Delta Lake tables.
+- **Third-party integration:** real GitHub REST API ingestion using explicit dlt source/resources, with pagination, dlt schema/state artifacts, and rate-limit capture.
+- **Lakehouse layers:** bronze raw payloads, silver typed models, and gold metric tables stored as Delta Lake tables with portable `local`, `minio`, and `r2` storage profile conventions.
 - **Multi-tenancy:** two example tenants, tenant-scoped paths, `tenant_id` columns, and tests that fail closed on cross-tenant contamination.
 - **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
 - **Metrics:** daily PR throughput and per-PR open-to-merge cycle time.
 - **Observability:** local freshness/row-count/rate-limit CLI plus Dagster materialization metadata.
-- **Export surfaces:** FastAPI REST endpoints and a minimal MCP wrapper expose tenant-scoped gold metrics with bearer-token allowlists.
+- **Export surfaces:** FastAPI REST endpoints and a minimal MCP wrapper expose tenant-scoped gold metrics through a shared DuckDB SQL query layer with bearer-token allowlists.
+- **Developer workflow:** `Taskfile.yml` is the primary command surface for setup, validation, Dagster, ingestion, transforms, observability, REST, and MCP.
 - **IaC:** Terraform local provider prepares ignored runtime files; optional Docker Compose runs Dagster locally.
 - **Validation:** deterministic tests do not require live GitHub credentials.
 
@@ -46,9 +51,10 @@ Start with [`docs/architecture.md`](docs/architecture.md) for the full architect
 Implemented now:
 
 - Python 3.11+ project managed with `uv`.
-- Validated stack: `dlt`, `deltalake`, `pyarrow`, `dagster`, FastAPI, and MCP.
+- Validated stack: `dlt`, `deltalake`, `pyarrow`, `duckdb`, `dagster`, FastAPI, MCP, and Taskfile workflow conventions.
 - Tenant/source configuration in `config/tenants.example.yaml`.
-- GitHub repositories and pull requests ingested through dlt into tenant-scoped bronze Delta tables.
+- Portable storage profile conventions for `local`, `minio`, and `r2` in `src/kabuto_kurage/paths.py`.
+- GitHub repositories and pull requests ingested through explicit dlt source/resources into tenant-scoped bronze Delta tables, with dlt schema/state inspection artifacts.
 - Silver repository and pull-request models materialized from bronze Delta tables.
 - Gold metrics for daily PR throughput and PR open-to-merge cycle time.
 - Dagster asset graph with tenant partitions:
@@ -60,10 +66,10 @@ Implemented now:
   - `github_gold_pr_cycle_time`
 - Local observability for row counts, last successful ingestion, freshness/lag, and GitHub rate-limit status.
 - Local Infrastructure as Code under `iac/local/`.
-- Tenant-scoped REST export API under `/api/v1` for GitHub gold metrics.
+- Tenant-scoped REST export API under `/api/v1` for GitHub gold metrics, backed by DuckDB SQL over gold Delta tables.
 - Minimal local MCP wrapper exposing the same GitHub gold metric contracts as three tools.
 
-Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, dashboard, production auth/security, or cloud deployment.
+Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, dashboard, production auth/security, live MinIO/R2 service provisioning, or cloud deployment.
 
 ## Prerequisites
 
@@ -79,6 +85,26 @@ Optional local infrastructure path:
 - Docker + `docker-compose` or `docker compose`
 
 Live GitHub materialization requires a GitHub token in `GITHUB_TOKEN` or `GH_TOKEN`. Tests do not require a token.
+
+## Storage profiles and secret handling
+
+The default storage profile is `local`, which writes Delta tables under `.local/data`
+or `KABUTO_DATA_ROOT`. The same logical table layout can also resolve to S3-compatible
+object storage profiles:
+
+| Profile | Selector | Purpose |
+| --- | --- | --- |
+| `local` | `KABUTO_STORAGE_PROFILE=local` | Default deterministic filesystem profile for tests and everyday development. |
+| `minio` | `KABUTO_STORAGE_PROFILE=minio` | Open-source S3-compatible local object-store profile using `KABUTO_MINIO_*` env vars. |
+| `r2` | `KABUTO_STORAGE_PROFILE=r2` | Cloudflare R2 remote S3-compatible profile using `KABUTO_R2_*` env vars. |
+
+Real GitHub, API export, MinIO, and R2 secrets should live in Proton Pass or another
+password manager, then be exported into your shell only when needed. Do not commit or
+echo `.env`, `.local/`, `.dlt/`, GitHub tokens, R2 account/access keys, MinIO keys,
+or API export tokens. The docs use placeholder token and bucket names only.
+
+See [`docs/tenancy.md`](docs/tenancy.md), [`docs/stack-validation.md`](docs/stack-validation.md),
+and [`docs/local-iac.md`](docs/local-iac.md) for profile-specific details.
 
 ## Quickstart: deterministic local validation
 
@@ -146,7 +172,7 @@ See [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md).
 
 ## Run the pipeline without Dagster
 
-Bronze ingestion uses dlt REST helpers for GitHub extraction, then writes the existing tenant-scoped Delta bronze tables. Use Taskfile first:
+Bronze ingestion uses explicit dlt source/resources for GitHub extraction, records dlt schema/state artifacts, then writes tenant-scoped Delta bronze tables. Use Taskfile first:
 
 ```bash
 task ingest tenant=sandbox max_repositories=1
@@ -286,9 +312,9 @@ Ignored local paths include:
 - local SQLite/database files
 - Terraform local state/provider cache/plan files
 
-By default, generated data lives under `.local/data`. Override with `KABUTO_DATA_ROOT` when needed.
+By default, generated data lives under `.local/data`. Override with `KABUTO_DATA_ROOT` when needed, or select `KABUTO_STORAGE_PROFILE=minio` / `KABUTO_STORAGE_PROFILE=r2` for S3-compatible object-storage URI resolution.
 
-GitHub token values belong in your shell or ignored `.env`, never in tenant YAML. Tenant YAML stores references like `token_env: GITHUB_TOKEN`.
+GitHub token values belong in your shell or ignored `.env`, never in tenant YAML. Tenant YAML stores references like `token_env: GITHUB_TOKEN`. Proton Pass is recommended as the human secret store, but the code reads only environment variables or ignored local config.
 
 ## Documentation map
 

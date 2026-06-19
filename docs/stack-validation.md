@@ -17,7 +17,13 @@ This note records the concrete local stack selected by ticket `.loom/tickets/202
 
 ## Validation Proof
 
-Run the proof from the repository root:
+Run the proof from the repository root through Taskfile:
+
+```bash
+task validate-stack
+```
+
+Direct command equivalent:
 
 ```bash
 uv run --with deltalake --with pyarrow --with dagster --with dlt --with duckdb \
@@ -126,6 +132,14 @@ aws_conditional_put=etag
 ```
 
 Live R2 validation is intentionally optional. If `KABUTO_R2_*` credentials are absent, validation must skip remote checks rather than fail deterministic local tests.
+
+## Safe Secret Workflow
+
+Store GitHub, MinIO, R2, and export API tokens in Proton Pass or another password
+manager. Export them into the current shell only when running live integrations. Do not
+commit `.env`, `.local/`, `.dlt/`, `config/storage.local.yaml`, tenant local config,
+bucket names, account IDs, access keys, or token values. Validation docs and tests use
+placeholder shapes only.
 
 ## Fallbacks
 

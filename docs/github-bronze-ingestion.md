@@ -34,7 +34,13 @@ cp config/tenants.example.yaml config/tenants.local.yaml
 export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 ```
 
-Run one tenant:
+Run one tenant through the primary Taskfile workflow:
+
+```bash
+task ingest tenant=sandbox
+```
+
+Direct script equivalent:
 
 ```bash
 uv run python tools/ingest_github_bronze.py --tenant sandbox
@@ -47,6 +53,12 @@ uv run python tools/ingest_github_bronze.py --all-tenants
 ```
 
 For safe validation against a temporary data root and limited repository count:
+
+```bash
+task ingest tenant=sandbox data_root=/tmp/kabuto-kurage-validation max_repositories=1
+```
+
+Direct script equivalent:
 
 ```bash
 uv run python tools/ingest_github_bronze.py \
@@ -83,9 +95,21 @@ Each row includes:
 
 `payload_json` is intentionally retained so later schema-evolution exercises can inspect raw source fields that are not yet modeled in silver tables.
 
+## Storage Profile Behavior
+
+The deterministic default profile is `local`, so the physical bronze table paths are
+filesystem paths under `.local/data/delta` or `KABUTO_DATA_ROOT/delta`. The storage
+profile layer can also resolve equivalent tenant-scoped bronze table URIs for MinIO
+and Cloudflare R2 using `KABUTO_STORAGE_PROFILE=minio` or `KABUTO_STORAGE_PROFILE=r2`.
+
+The current ingestion code preserves local filesystem writes for deterministic tests
+and portfolio demos. Object-store profiles centralize URI/credential conventions for
+Delta and DuckDB engine boundaries; live MinIO/R2 runs require ignored environment
+variables and are not required by the test suite.
+
 ## dlt Source, Resources, Schema, State, and Rate Limits
 
-GitHub bronze ingestion is represented as an explicit dlt source/resource graph:
+GitHub bronze ingestion is represented as an explicit dlt source/resource graph rather than only a hand-written REST loop:
 
 | dlt concept | Project value | Purpose |
 | --- | --- | --- |
@@ -105,7 +129,7 @@ For each response, ingestion captures these headers when available:
 - `x-ratelimit-reset`
 - `x-ratelimit-resource`
 
-During resource iteration, ingestion updates dlt source/resource state with tenant ID, ingestion run ID, fetched timestamp, row counts, write disposition, and latest rate-limit snapshot. After a run, local dlt inspection artifacts are written under:
+During resource iteration, ingestion updates dlt source/resource state with tenant ID, ingestion run ID, fetched timestamp, row counts, write disposition, and latest rate-limit snapshot. This gives the project dlt-native schema/state artifacts while the stable bronze Delta envelope remains the downstream contract for silver models. After a run, local dlt inspection artifacts are written under:
 
 ```text
 .local/data/dlt/github/{tenant_id}/schema.json
@@ -138,6 +162,14 @@ That keeps repeated local runs idempotent for the configured scope and avoids du
 - HTTP errors: ingestion fails with the response status and request URL. Rate-limit exhaustion is called out when headers indicate it.
 - Unexpected response shape: ingestion fails if list endpoints do not return lists or object endpoints do not return mappings.
 - Partial writes: API fetching completes before Delta writes begin, so a fetch failure does not overwrite existing bronze tables.
+
+## Secret Handling
+
+GitHub token values should be stored in Proton Pass or another password manager and
+exported into the shell as `GITHUB_TOKEN` or `GH_TOKEN` only when needed. Tenant YAML
+stores the env-var name, not the value. Do not commit `.env`, `.local/`, `.dlt/`,
+GitHub tokens, MinIO/R2 credentials, or dlt secrets. The dlt schema/state artifacts
+record source/resource metadata and row/rate-limit state, not token values.
 
 ## Out of Scope
 

@@ -16,10 +16,10 @@ In one sentence:
                          └──────────────┬───────────────┘
                                         │ tenant partition
                                         ▼
-┌──────────────┐   REST API    ┌──────────────────────────┐
-│ GitHub API   │──dlt REST────▶│ Bronze Delta tables      │
-│ repos + PRs  │  extraction   │ raw payload_json +       │
-│ pagination   │               │ fetch/run/rate metadata  │
+┌──────────────┐  dlt source/  ┌──────────────────────────┐
+│ GitHub API   │──resources───▶│ Bronze Delta tables      │
+│ repos + PRs  │ pagination    │ raw payload_json + dlt   │
+│ rate limits  │ + state       │ schema/state + metadata  │
 └──────────────┘               └─────────────┬────────────┘
                                              │ normalize stable fields
                                              ▼
@@ -47,10 +47,11 @@ In one sentence:
 Supporting local platform pieces:
 
 ```text
-FastAPI export API ───────▶ tenant-scoped `/api/v1` JSON over gold metrics
-MCP metric wrapper ───────▶ three tenant-scoped tools over the same query/auth layer
+FastAPI export API ───────▶ tenant-scoped `/api/v1` JSON over gold metrics via DuckDB SQL
+MCP metric wrapper ───────▶ three tenant-scoped tools over the same DuckDB query/auth layer
 Terraform local provider ──▶ .local/dagster + .local/runtime + .local/data
 Docker Compose (optional) ─▶ local Dagster service runner
+Taskfile.yml ─────────────▶ primary developer workflow for setup/validate/run commands
 observe_github.py ────────▶ row counts, freshness, last run, rate-limit status
 pytest/ruff/mypy ─────────▶ deterministic validation without live GitHub
 ```
@@ -59,24 +60,25 @@ pytest/ruff/mypy ─────────▶ deterministic validation without
 
 Implemented now:
 
-- GitHub REST API ingestion for repositories and pull requests.
-- Tenant registry and tenant-scoped storage paths.
-- Delta Lake bronze/silver/gold tables on the local filesystem.
+- GitHub REST API ingestion for repositories and pull requests through explicit dlt source/resources.
+- Tenant registry and tenant-scoped storage paths/URIs.
+- Delta Lake bronze/silver/gold tables with `local`, `minio`, and `r2` storage profile conventions; deterministic tests use the local filesystem profile.
 - Dagster assets partitioned by tenant.
 - Gold metrics:
   - daily PR opened/merged/closed counts;
   - per-PR open-to-merge cycle time.
 - Local observability command for table existence, row counts, freshness, last run IDs, and GitHub rate-limit metadata.
-- Tenant-scoped REST export API over existing gold metrics.
+- Tenant-scoped REST export API over existing gold metrics through DuckDB SQL.
 - Minimal MCP wrapper exposing the same existing gold metric contracts as three tools.
 - Local Terraform module and optional Docker Compose service runner.
+- Taskfile workflow for setup, validation, Dagster, ingestion, transforms, observability, REST, and MCP.
 
 Not implemented yet:
 
 - Jira, CI/CD, incident, review/comment, or AI-tool integrations.
 - Customer dashboard or broader MCP/API surface beyond the three initial metric tools.
 - Near-real-time webhooks/queues/sensors.
-- Production auth, row-level security, encryption, alerting, cloud deployment, or tenant resource isolation.
+- Production auth, row-level security, encryption, alerting, live object-store provisioning, cloud deployment, or tenant resource isolation.
 
 ## Code and Data Layout
 
@@ -84,7 +86,7 @@ Not implemented yet:
 | --- | --- |
 | Tenant/source config | `config/tenants.example.yaml` |
 | Tenant validation and registry | `src/kabuto_kurage/tenancy.py` |
-| Local path conventions | `src/kabuto_kurage/paths.py` |
+| Storage profile/path/URI conventions | `src/kabuto_kurage/paths.py` |
 | GitHub bronze ingestion | `src/kabuto_kurage/ingestion/github_bronze.py` |
 | Silver transforms | `src/kabuto_kurage/transforms/github_silver.py` |
 | Gold metrics | `src/kabuto_kurage/transforms/github_gold.py` |
@@ -94,11 +96,12 @@ Not implemented yet:
 | REST API auth | `src/kabuto_kurage/api/auth.py` |
 | MCP metric wrapper | `src/kabuto_kurage/mcp_server.py` |
 | DuckDB gold metric query layer | `src/kabuto_kurage/queries/github_metrics.py` |
+| Developer workflow | `Taskfile.yml` |
 | Local observability | `src/kabuto_kurage/observability.py` |
 | Local IaC | `iac/local/` |
 | Validation tests | `tests/` |
 
-Delta tables use this local convention:
+With the default `local` storage profile, Delta tables use this filesystem convention:
 
 ```text
 .local/data/delta/tenants/{tenant_id}/{layer}/github/{table_name}
@@ -111,6 +114,21 @@ Examples:
 .local/data/delta/tenants/sandbox/silver/github/pull_requests
 .local/data/delta/tenants/sandbox/gold/github/pr_cycle_time
 ```
+
+## Storage Profiles
+
+Storage resolution is centralized in `src/kabuto_kurage/paths.py`. The logical
+lakehouse layout is tenant-scoped for every profile, but the physical URI changes:
+
+| Profile | Use | Table-location behavior |
+| --- | --- | --- |
+| `local` | Default tests/dev | Filesystem paths under `.local/data/delta` or `KABUTO_DATA_ROOT/delta`. |
+| `minio` | Open-source local object-store realism | S3-compatible `s3://...` URIs from `KABUTO_MINIO_*` env vars. |
+| `r2` | Chris's remote Cloudflare R2 profile | S3-compatible Delta writes plus DuckDB `r2://...` scan URIs from `KABUTO_R2_*` env vars. |
+
+Local tests intentionally do not require live MinIO/R2 credentials. Object-store
+secrets are loaded only at engine boundaries and should come from Proton Pass or
+another secret manager into environment variables or ignored local config.
 
 ## Data Flow
 
@@ -133,17 +151,18 @@ The loader rejects invalid tenant IDs, duplicate tenants, missing GitHub source 
 
 ### 2. Bronze: raw GitHub payloads
 
-Bronze ingestion fetches configured repositories and pull requests via GitHub REST API using dlt REST helpers.
+Bronze ingestion fetches configured repositories and pull requests via GitHub REST API using explicit dlt source/resources.
 
-It intentionally keeps integration concerns visible while dlt owns REST extraction and `HeaderLinkPaginator` pagination:
+It intentionally keeps integration concerns visible while dlt owns source/resource iteration, REST extraction, `HeaderLinkPaginator` pagination, and schema/state inspection artifacts:
 
 - `Link` header pagination;
 - `x-ratelimit-*` header capture;
 - source URLs and IDs;
 - `ingestion_run_id` and `fetched_at`;
-- canonical `payload_json` for schema-evolution learning.
+- canonical `payload_json` for schema-evolution learning;
+- local dlt inspection artifacts at `.local/data/dlt/github/{tenant_id}/schema.json` and `state.json`.
 
-The project continues to write the curated tenant-scoped bronze Delta schema itself so downstream silver, gold, Dagster, REST, and MCP contracts stay stable.
+The project preserves the tenant-scoped bronze Delta compatibility contract so downstream silver, gold, Dagster, REST, and MCP contracts stay stable while dlt source/resource/schema/state behavior is visible.
 
 This first snapshot-style bronze path overwrites each tenant/resource table after API fetching succeeds. That makes repeated local runs idempotent for the configured scope. It does not yet implement append-only raw history or incremental cursors.
 
@@ -184,6 +203,12 @@ github_bronze_pull_requests ┘
 ```
 
 Start the UI:
+
+```bash
+task dagster
+```
+
+Direct command equivalent:
 
 ```bash
 export DAGSTER_HOME=.local/dagster
@@ -247,7 +272,7 @@ See `docs/tenancy.md` for details and limitations.
 
 ## Delta Lake Learning Notes
 
-The project uses the open-source `deltalake` Python package (`delta-rs`) with `pyarrow`, avoiding a Spark/JVM dependency for the local learning loop.
+The project uses the open-source `deltalake` Python package (`delta-rs`) with `pyarrow`, avoiding a Spark/JVM dependency for the local learning loop. Storage profile helpers can produce local filesystem paths or S3-compatible URIs for MinIO/R2; deterministic tests use local paths.
 
 Concrete Delta concepts visible in the repo:
 
@@ -266,7 +291,13 @@ Useful files:
 
 ## Observability
 
-Local observability is intentionally lightweight and inspectable:
+Local observability is intentionally lightweight and inspectable. Taskfile is the preferred command surface:
+
+```bash
+task observe tenant=sandbox
+```
+
+Direct command equivalent:
 
 ```bash
 uv run python tools/observe_github.py --tenant sandbox --format table
@@ -285,6 +316,30 @@ The command reports one row per known GitHub table with:
 Dagster materializations expose the same operational signals where relevant.
 
 See `docs/observability.md` for how to interpret `missing`, `empty`, `unknown`, `fresh`, and `stale`.
+
+
+## Developer Workflow
+
+`Taskfile.yml` is the primary human-facing workflow. It wraps the underlying Python
+scripts and long-running services without removing those scripts as implementation
+entrypoints. Common tasks include:
+
+```bash
+task setup
+task validate
+task dagster
+task ingest tenant=sandbox max_repositories=1
+task silver tenant=sandbox
+task gold tenant=sandbox
+task observe tenant=sandbox
+task api
+task mcp
+```
+
+Secrets are still environment variables or ignored config files. Task commands are
+written so they do not echo GitHub, API export, MinIO, or R2 secret values. Store
+those values in Proton Pass or another password manager and export them into the
+shell only when needed.
 
 ## Local Infrastructure as Code
 
@@ -339,7 +394,13 @@ Project assumptions for learning:
 
 ## Validation Posture
 
-Current validation commands:
+Current primary validation command:
+
+```bash
+task validate
+```
+
+Direct validation commands:
 
 ```bash
 uv run pytest

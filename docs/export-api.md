@@ -28,20 +28,23 @@ internally.
 Install dependencies and materialize gold metrics first. A typical local path is:
 
 ```bash
-uv sync
+task setup
 export KABUTO_TENANTS_CONFIG=config/tenants.local.yaml
 export GITHUB_TOKEN=...              # or GH_TOKEN; needed only for live GitHub ingestion
 export KABUTO_GITHUB_MAX_REPOSITORIES=1
-uv run dagster asset materialize \
-  -m kabuto_kurage.definitions \
-  --partition sandbox \
-  --select github_bronze_repositories,github_bronze_pull_requests,github_silver_repositories,github_silver_pull_requests,github_gold_pr_throughput_daily,github_gold_pr_cycle_time
+task materialize tenant=sandbox
 ```
 
 Then configure a local API token and start the REST API:
 
 ```bash
 export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
+task api
+```
+
+Direct command equivalent:
+
+```bash
 uv run uvicorn kabuto_kurage.api.app:app --reload
 ```
 
@@ -59,7 +62,7 @@ tokens:
 ```bash
 export SANDBOX_EXPORT_API_TOKEN='replace-with-local-token'
 export KABUTO_API_TOKENS_CONFIG=.local/api-tokens.yaml
-uv run uvicorn kabuto_kurage.api.app:app --reload
+task api
 ```
 
 Every metric REST request must include `Authorization: Bearer <token>`. Each MCP tool
@@ -77,7 +80,9 @@ maps to an explicit tenant allowlist. The export layer never defaults to all ten
 The REST API reads through the shared DuckDB query layer in
 `src/kabuto_kurage/queries/github_metrics.py`. That layer uses DuckDB SQL and
 `delta_scan(...)` against tenant-scoped gold Delta tables instead of loading full
-metric tables into Python for filtering. The MCP wrapper in
+metric tables into Python for filtering. DuckDB table URIs and extension/secret setup
+come from the active storage profile (`local`, `minio`, or `r2`) in
+`src/kabuto_kurage/paths.py`; deterministic tests use the local profile. The MCP wrapper in
 `src/kabuto_kurage/mcp_server.py` uses the same query layer and auth helper. Neither
 surface reads bronze tables, raw GitHub payload JSON, or GitHub token configuration.
 
@@ -233,6 +238,12 @@ Run it locally over stdio after configuring the same token allowlist used by RES
 
 ```bash
 export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
+task mcp
+```
+
+Direct command equivalent:
+
+```bash
 uv run python -m kabuto_kurage.mcp_server
 ```
 
@@ -257,7 +268,9 @@ Example MCP tool arguments for `github_metrics_summary`:
 ```
 
 The tool response uses the same JSON shape as the REST summary response. Token values
-are used only for local authorization and are not returned. The wrapper is a local
+are used only for local authorization and are not returned. Store real API export
+tokens in Proton Pass or another password manager and export them into the shell or
+an ignored config file only when needed. The wrapper is a local
 learning analogue to Jellyfish's public MCP pattern, not a clone of Jellyfish's MCP
 implementation and not a Jellyfish-compatible MCP server.
 
@@ -298,7 +311,13 @@ Deterministic tests in `tests/test_export_rest_api.py` and
 - MCP allowed, missing-token, invalid-token, and disallowed-tenant behavior matches the
   same local allowlist semantics as REST.
 
-Run the full validation suite with:
+Run the full validation suite with Taskfile:
+
+```bash
+task validate
+```
+
+Direct command equivalent:
 
 ```bash
 uv run pytest

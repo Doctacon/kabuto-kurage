@@ -48,7 +48,7 @@ You can still run the underlying `uv` commands directly when Task is unavailable
 task validate-stack
 ```
 
-This calls `tools/validate_stack.py` to validate local Delta, dlt, DuckDB, and Dagster stack assumptions.
+This calls `tools/validate_stack.py` to validate local Delta, dlt, DuckDB `delta_scan`, and Dagster stack assumptions. It also documents MinIO/R2 config shapes without requiring live object-store credentials.
 
 ## Local IaC
 
@@ -75,6 +75,39 @@ docker-compose --env-file .local/runtime/kabuto.env -f iac/local/docker-compose.
 
 Terraform manages generated local config/files only. Docker Compose runs the optional local process. Neither path provisions cloud/Kubernetes resources or secrets. Use `docker compose` with the same arguments if your environment has the Compose plugin instead of `docker-compose`. See `docs/local-iac.md`.
 
+
+## Storage profiles
+
+The default profile is local filesystem storage:
+
+```bash
+export KABUTO_STORAGE_PROFILE=local
+```
+
+For object-store experiments, use the same logical table layout with S3-compatible
+profiles. MinIO is the open-source local profile; Cloudflare R2 is the remote profile
+for personal runs. Real values should come from Proton Pass or another secret manager
+and be exported only into the current shell or ignored local config:
+
+```bash
+# MinIO shape; placeholders only
+export KABUTO_STORAGE_PROFILE=minio
+export KABUTO_MINIO_BUCKET=<bucket-name>
+export KABUTO_MINIO_ENDPOINT_URL=http://localhost:9000
+export KABUTO_MINIO_ACCESS_KEY_ID=<from-secret-manager>
+export KABUTO_MINIO_SECRET_ACCESS_KEY=<from-secret-manager>
+
+# R2 shape; placeholders only
+export KABUTO_STORAGE_PROFILE=r2
+export KABUTO_R2_BUCKET=<bucket-name>
+export KABUTO_R2_ACCOUNT_ID=<from-secret-manager>
+export KABUTO_R2_ACCESS_KEY_ID=<from-secret-manager>
+export KABUTO_R2_SECRET_ACCESS_KEY=<from-secret-manager>
+```
+
+Do not paste real bucket names, account IDs, access keys, or tokens into committed docs.
+Deterministic tests use `local` and do not require live MinIO/R2 services.
+
 ## GitHub bronze ingestion
 
 Export your GitHub token from Proton Pass or another password manager into the current shell without printing it in commands:
@@ -83,7 +116,7 @@ Export your GitHub token from Proton Pass or another password manager into the c
 export GITHUB_TOKEN=...
 ```
 
-Then run bounded bronze ingestion through Taskfile:
+Then run bounded dlt-native bronze ingestion through Taskfile. The ingestion path uses dlt source/resources, records dlt schema/state artifacts, and preserves tenant-scoped bronze Delta tables:
 
 ```bash
 task ingest tenant=sandbox max_repositories=1

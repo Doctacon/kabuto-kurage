@@ -8,7 +8,7 @@ It demonstrates a small but coherent data platform:
 
 ```text
 GitHub API
-  └─ repos + pull requests, pagination, rate-limit metadata
+  └─ dlt REST extraction for repos + pull requests, pagination, rate-limit metadata
       ▼
 Bronze Delta Lake
   └─ tenant-scoped raw payload_json + ingestion metadata
@@ -29,7 +29,7 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 
 ## What a reviewer should notice in five minutes
 
-- **Third-party integration:** real GitHub REST API ingestion using `httpx`, with explicit pagination and rate-limit capture.
+- **Third-party integration:** real GitHub REST API ingestion using dlt REST helpers, with explicit pagination and rate-limit capture.
 - **Lakehouse layers:** bronze raw payloads, silver typed models, and gold metric tables stored as local Delta Lake tables.
 - **Multi-tenancy:** two example tenants, tenant-scoped paths, `tenant_id` columns, and tests that fail closed on cross-tenant contamination.
 - **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
@@ -46,9 +46,9 @@ Start with [`docs/architecture.md`](docs/architecture.md) for the full architect
 Implemented now:
 
 - Python 3.11+ project managed with `uv`.
-- Validated stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
+- Validated stack: `dlt`, `deltalake`, `pyarrow`, `dagster`, FastAPI, and MCP.
 - Tenant/source configuration in `config/tenants.example.yaml`.
-- GitHub repositories and pull requests ingested into tenant-scoped bronze Delta tables.
+- GitHub repositories and pull requests ingested through dlt into tenant-scoped bronze Delta tables.
 - Silver repository and pull-request models materialized from bronze Delta tables.
 - Gold metrics for daily PR throughput and PR open-to-merge cycle time.
 - Dagster asset graph with tenant partitions:
@@ -141,7 +141,7 @@ See [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md).
 
 ## Run the pipeline without Dagster
 
-Bronze ingestion:
+Bronze ingestion uses dlt REST helpers for GitHub extraction, then writes the existing tenant-scoped Delta bronze tables:
 
 ```bash
 uv run python tools/ingest_github_bronze.py --tenant sandbox --max-repositories 1

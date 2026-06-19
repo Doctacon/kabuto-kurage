@@ -17,8 +17,8 @@ In one sentence:
                                         │ tenant partition
                                         ▼
 ┌──────────────┐   REST API    ┌──────────────────────────┐
-│ GitHub API   │──────────────▶│ Bronze Delta tables      │
-│ repos + PRs  │               │ raw payload_json +       │
+│ GitHub API   │──dlt REST────▶│ Bronze Delta tables      │
+│ repos + PRs  │  extraction   │ raw payload_json +       │
 │ pagination   │               │ fetch/run/rate metadata  │
 └──────────────┘               └─────────────┬────────────┘
                                              │ normalize stable fields
@@ -133,15 +133,17 @@ The loader rejects invalid tenant IDs, duplicate tenants, missing GitHub source 
 
 ### 2. Bronze: raw GitHub payloads
 
-Bronze ingestion fetches configured repositories and pull requests via GitHub REST API using `httpx`.
+Bronze ingestion fetches configured repositories and pull requests via GitHub REST API using dlt REST helpers.
 
-It intentionally keeps integration concerns visible:
+It intentionally keeps integration concerns visible while dlt owns REST extraction and `HeaderLinkPaginator` pagination:
 
 - `Link` header pagination;
 - `x-ratelimit-*` header capture;
 - source URLs and IDs;
 - `ingestion_run_id` and `fetched_at`;
 - canonical `payload_json` for schema-evolution learning.
+
+The project continues to write the curated tenant-scoped bronze Delta schema itself so downstream silver, gold, Dagster, REST, and MCP contracts stay stable.
 
 This first snapshot-style bronze path overwrites each tenant/resource table after API fetching succeeds. That makes repeated local runs idempotent for the configured scope. It does not yet implement append-only raw history or incremental cursors.
 

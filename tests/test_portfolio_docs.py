@@ -13,6 +13,7 @@ def test_portfolio_readme_points_reviewer_to_core_story() -> None:
     required_phrases = [
         "What a reviewer should notice in five minutes",
         "GitHub API",
+        "dlt REST extraction",
         "Bronze Delta Lake",
         "Silver Delta Lake",
         "Gold Delta Lake",
@@ -32,6 +33,7 @@ def test_architecture_doc_covers_required_portfolio_surfaces() -> None:
     required_sections = [
         "## Five-Minute Map",
         "## Data Flow",
+        "dlt REST helpers",
         "## Multi-Tenancy Model",
         "## Delta Lake Learning Notes",
         "## Observability",

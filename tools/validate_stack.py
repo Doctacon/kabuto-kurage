@@ -2,12 +2,12 @@
 
 Run from the repository root with:
 
-    uv run --with deltalake --with pyarrow --with dagster --with httpx \
+    uv run --with deltalake --with pyarrow --with dagster --with dlt \
       python tools/validate_stack.py
 
 This is intentionally a narrow proof, not the project scaffold. It verifies:
 - Python can write/read a local Delta table via delta-rs (`deltalake`).
-- GitHub API token setup is either usable or reported as missing.
+- GitHub API token setup is either usable through dlt REST helpers or reported as missing.
 - Dagster can materialize a toy asset that writes and reads Delta storage.
 """
 
@@ -19,10 +19,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pyarrow as pa
 from dagster import MaterializeResult, MetadataValue, asset, materialize
 from deltalake import DeltaTable, write_deltalake
+from dlt.sources.helpers.rest_client.auth import BearerTokenAuth
+from dlt.sources.helpers.rest_client.client import RESTClient
 
 
 def _delta_rows() -> pa.Table:
@@ -69,17 +70,21 @@ def validate_github_api() -> dict[str, Any]:
             "setup": "Set GITHUB_TOKEN or GH_TOKEN to validate authenticated GitHub API access.",
         }
 
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "kabuto-kurage-stack-validation",
-    }
-    with httpx.Client(timeout=10.0, headers=headers) as client:
-        response = client.get("https://api.github.com/rate_limit")
-
-    response.raise_for_status()
-    body = response.json()
+    client = RESTClient(
+        base_url="https://api.github.com/",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "kabuto-kurage-stack-validation",
+        },
+        auth=BearerTokenAuth(token),
+    )
+    try:
+        response = client.get("/rate_limit", timeout=10.0)
+        response.raise_for_status()
+        body = response.json()
+    finally:
+        client.session.close()
     core = body.get("resources", {}).get("core", {})
     return {
         "status": "passed",

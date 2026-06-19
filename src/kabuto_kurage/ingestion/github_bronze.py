@@ -10,18 +10,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
-import httpx
 import pyarrow as pa
+import requests
 from deltalake import write_deltalake
+from dlt.sources.helpers.rest_client.auth import BearerTokenAuth
+from dlt.sources.helpers.rest_client.client import RESTClient
+from dlt.sources.helpers.rest_client.paginators import HeaderLinkPaginator
 
 from kabuto_kurage.paths import data_root, delta_table_path
 from kabuto_kurage.tenancy import GitHubSourceConfig, TenantConfig, load_tenant_registry
@@ -49,8 +50,6 @@ BRONZE_SCHEMA = pa.schema(
     ]
 )
 
-LINK_REL_PATTERN = re.compile(r'<(?P<url>[^>]+)>;\s*rel="(?P<rel>[^"]+)"')
-
 
 class GitHubIngestionError(RuntimeError):
     """Raised when GitHub bronze ingestion cannot complete safely."""
@@ -67,7 +66,7 @@ class RateLimitSnapshot:
     resource: str | None
 
     @classmethod
-    def from_headers(cls, headers: httpx.Headers | Mapping[str, str]) -> RateLimitSnapshot:
+    def from_headers(cls, headers: Mapping[str, str]) -> RateLimitSnapshot:
         """Build a rate-limit snapshot from response headers when present."""
 
         return cls(
@@ -137,7 +136,12 @@ class GitHubBronzeIngestionResult:
 
 
 class GitHubRestClient:
-    """Small GitHub REST client with explicit pagination and header capture."""
+    """Small dlt-backed GitHub REST client with pagination and header capture.
+
+    The project keeps this wrapper deliberately thin: dlt's ``RESTClient`` and
+    ``HeaderLinkPaginator`` own API extraction/pagination while this class preserves the
+    existing bronze ingestion contract and rate-limit metadata shape.
+    """
 
     def __init__(
         self,
@@ -145,53 +149,50 @@ class GitHubRestClient:
         api_base_url: str,
         token: str,
         user_agent: str = DEFAULT_USER_AGENT,
-        client: httpx.Client | None = None,
+        session: requests.Session | None = None,
+        rest_client: RESTClient | None = None,
     ) -> None:
-        self._api_base_url = api_base_url.rstrip("/") + "/"
-        self._owned_client = client is None
-        self._client = client or httpx.Client(
-            timeout=30.0,
-            headers={
+        self._owned_session = session is None and rest_client is None
+        rest_client_kwargs: dict[str, Any] = {
+            "base_url": api_base_url.rstrip("/") + "/",
+            "headers": {
                 "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
                 "X-GitHub-Api-Version": GITHUB_API_VERSION,
                 "User-Agent": user_agent,
             },
-        )
+            "auth": BearerTokenAuth(token),
+            "paginator": HeaderLinkPaginator(),
+        }
+        if session is not None:
+            rest_client_kwargs["session"] = session
+        self._rest_client = rest_client or RESTClient(**rest_client_kwargs)
 
     def close(self) -> None:
-        """Close the underlying client if this wrapper owns it."""
+        """Close the underlying dlt REST session if this wrapper owns it."""
 
-        if self._owned_client:
-            self._client.close()
+        if self._owned_session:
+            self._rest_client.session.close()
 
     def get_paginated(
         self, path: str, *, params: Mapping[str, str | int] | None = None
     ) -> tuple[list[dict[str, Any]], list[RateLimitSnapshot]]:
-        """GET all pages for a list-returning endpoint."""
+        """GET all pages for a list-returning endpoint via dlt REST pagination."""
 
-        url: str | None = self._url(path)
-        page_params: dict[str, str | int] | None = dict(params or {})
         items: list[dict[str, Any]] = []
         rate_limits: list[RateLimitSnapshot] = []
-
-        while url:
-            response = self._client.get(url, params=page_params)
+        for page in self._rest_client.paginate(path, params=dict(params or {})):
+            response = page.response
             rate_limits.append(RateLimitSnapshot.from_headers(response.headers))
             _raise_for_status(response)
-            body = response.json()
-            if not isinstance(body, list):
-                raise GitHubIngestionError(f"Expected list response from GitHub endpoint {path}")
-            items.extend(_ensure_mapping_items(body, endpoint=path))
-            url = _next_link(response.headers.get("link"))
-            page_params = None
+            page_items = list(page)
+            items.extend(_ensure_mapping_items(page_items, endpoint=path))
 
         return items, rate_limits
 
     def get_one(self, path: str) -> tuple[dict[str, Any], RateLimitSnapshot]:
-        """GET a single object endpoint."""
+        """GET a single object endpoint via dlt's REST client."""
 
-        response = self._client.get(self._url(path))
+        response = self._rest_client.get(path)
         rate_limit = RateLimitSnapshot.from_headers(response.headers)
         _raise_for_status(response)
         body = response.json()
@@ -199,8 +200,13 @@ class GitHubRestClient:
             raise GitHubIngestionError(f"Expected object response from GitHub endpoint {path}")
         return dict(body), rate_limit
 
-    def _url(self, path: str) -> str:
-        return urljoin(self._api_base_url, path.lstrip("/"))
+    def dlt_backend_summary(self) -> dict[str, str]:
+        """Return the dlt extraction primitives used by this client for validation/docs."""
+
+        return {
+            "client": type(self._rest_client).__name__,
+            "paginator": type(self._rest_client.paginator).__name__,
+        }
 
     def __enter__(self) -> GitHubRestClient:
         return self
@@ -461,24 +467,15 @@ def _token_from_env(source_config: GitHubSourceConfig) -> str:
     return token
 
 
-def _raise_for_status(response: httpx.Response) -> None:
+def _raise_for_status(response: requests.Response) -> None:
     try:
         response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
+    except requests.HTTPError as exc:
         rate_limit = RateLimitSnapshot.from_headers(response.headers)
         message = f"GitHub API request failed with HTTP {response.status_code} for {response.url}"
         if response.status_code in {403, 429} and rate_limit.remaining == 0:
             message += "; rate limit appears exhausted"
         raise GitHubIngestionError(message) from exc
-
-
-def _next_link(link_header: str | None) -> str | None:
-    if not link_header:
-        return None
-    for match in LINK_REL_PATTERN.finditer(link_header):
-        if match.group("rel") == "next":
-            return match.group("url")
-    return None
 
 
 def _ensure_mapping_items(items: Iterable[Any], *, endpoint: str) -> list[dict[str, Any]]:

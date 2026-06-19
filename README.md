@@ -20,8 +20,9 @@ Gold Delta Lake
   └─ PR throughput and open-to-merge cycle-time metrics
       ├─▶ Dagster UI
       │    └─ tenant partitions, asset lineage, materializations, freshness metadata
-      └─▶ REST export API
-           └─ tenant-scoped `/api/v1` JSON endpoints over gold metrics
+      └─▶ Export surfaces
+           ├─ REST `/api/v1` JSON endpoints over gold metrics
+           └─ MCP metric tools over the same query/auth layer
 ```
 
 The project is inspired by public Jellyfish Staff Data Engineer role/product research, but it does **not** claim to reproduce Jellyfish's private architecture or proprietary metrics. See [Jellyfish relevance](#jellyfish-relevance-verified-facts-vs-assumptions).
@@ -34,7 +35,7 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 - **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
 - **Metrics:** daily PR throughput and per-PR open-to-merge cycle time.
 - **Observability:** local freshness/row-count/rate-limit CLI plus Dagster materialization metadata.
-- **Export API:** FastAPI REST endpoints expose tenant-scoped gold metrics with bearer-token allowlists.
+- **Export surfaces:** FastAPI REST endpoints and a minimal MCP wrapper expose tenant-scoped gold metrics with bearer-token allowlists.
 - **IaC:** Terraform local provider prepares ignored runtime files; optional Docker Compose runs Dagster locally.
 - **Validation:** deterministic tests do not require live GitHub credentials.
 
@@ -60,8 +61,9 @@ Implemented now:
 - Local observability for row counts, last successful ingestion, freshness/lag, and GitHub rate-limit status.
 - Local Infrastructure as Code under `iac/local/`.
 - Tenant-scoped REST export API under `/api/v1` for GitHub gold metrics.
+- Minimal local MCP wrapper exposing the same GitHub gold metric contracts as three tools.
 
-Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, MCP wrapper, dashboard, production auth/security, or cloud deployment.
+Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, dashboard, production auth/security, or cloud deployment.
 
 ## Prerequisites
 
@@ -210,6 +212,25 @@ internal architecture or metric definitions.
 
 See [`docs/export-api.md`](docs/export-api.md).
 
+## Run the local MCP metric wrapper
+
+The MCP wrapper is an agent-friendly local learning analogue to Jellyfish's public MCP pattern. It is not a clone of Jellyfish's MCP implementation or API. It exposes only three tools over the same query/auth layer as REST:
+
+- `github_pr_throughput_daily`
+- `github_pr_cycle_time`
+- `github_metrics_summary`
+
+Configure the same token allowlist used by REST, then run the stdio server:
+
+```bash
+export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
+uv run python -m kabuto_kurage.mcp_server
+```
+
+Each tool requires explicit `tenant_id` and `api_token` arguments. A token can read only tenants in its allowlist; no tool defaults to all tenants or returns bronze `payload_json`/secret values.
+
+See [`docs/export-api.md`](docs/export-api.md).
+
 ## Local Infrastructure as Code
 
 Terraform prepares local runtime files only; it does not provision cloud resources or secrets.
@@ -275,7 +296,7 @@ GitHub token values belong in your shell or ignored `.env`, never in tenant YAML
 | Gold GitHub metrics | [`docs/github-gold-metrics.md`](docs/github-gold-metrics.md) |
 | Dagster asset graph | [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md) |
 | Observability/freshness | [`docs/observability.md`](docs/observability.md) |
-| REST export API | [`docs/export-api.md`](docs/export-api.md) |
+| REST export API + MCP wrapper | [`docs/export-api.md`](docs/export-api.md) |
 | Local IaC | [`docs/local-iac.md`](docs/local-iac.md) |
 
 ## Jellyfish relevance: verified facts vs assumptions

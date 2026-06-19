@@ -12,6 +12,12 @@ ENDPOINTS = [
     "/api/v1/tenants/{tenant_id}/metrics/github/summary",
 ]
 
+MCP_TOOLS = [
+    "github_pr_throughput_daily",
+    "github_pr_cycle_time",
+    "github_metrics_summary",
+]
+
 
 def test_export_api_docs_map_each_endpoint_to_gold_tables() -> None:
     docs = EXPORT_API.read_text(encoding="utf-8")
@@ -22,6 +28,9 @@ def test_export_api_docs_map_each_endpoint_to_gold_tables() -> None:
     assert "gold/github/pr_throughput_daily" in docs
     assert "gold/github/pr_cycle_time" in docs
     assert "src/kabuto_kurage/queries/github_metrics.py" in docs
+    assert "src/kabuto_kurage/mcp_server.py" in docs
+    for tool_name in MCP_TOOLS:
+        assert tool_name in docs
 
 
 def test_export_api_docs_include_setup_curl_responses_and_errors() -> None:
@@ -37,6 +46,9 @@ def test_export_api_docs_include_setup_curl_responses_and_errors() -> None:
         "Invalid bearer token",
         "Token is not allowed to access tenant sandbox",
         "end_date must be greater than or equal to start_date",
+        "uv run python -m kabuto_kurage.mcp_server",
+        "api_token",
+        "The tool response uses the same JSON shape as the REST summary response",
     ]
     for phrase in required_phrases:
         assert phrase in docs
@@ -54,9 +66,10 @@ def test_export_api_docs_capture_tenant_scope_and_jellyfish_boundary() -> None:
     required_phrases = [
         "Each token maps",
         "explicit tenant allowlist",
-        "The API never defaults to all tenants",
+        "The export layer never defaults to all tenants",
         "not a compatible Jellyfish API",
         "not Jellyfish-compatible",
+        "not a clone of Jellyfish's MCP implementation",
         "claim Jellyfish uses FastAPI",
     ]
     for phrase in required_phrases:
@@ -65,6 +78,8 @@ def test_export_api_docs_capture_tenant_scope_and_jellyfish_boundary() -> None:
     forbidden_claims = [
         "Jellyfish's API is compatible with these endpoints",
         "Jellyfish's internal API is implemented with FastAPI",
+        "This is Jellyfish's MCP implementation",
+        "Jellyfish's MCP server is compatible with these tools",
         "Jellyfish's internal tenant model is this allowlist model",
         "These metrics reproduce Jellyfish proprietary metrics",
     ]

@@ -48,6 +48,7 @@ Supporting local platform pieces:
 
 ```text
 FastAPI export API ───────▶ tenant-scoped `/api/v1` JSON over gold metrics
+MCP metric wrapper ───────▶ three tenant-scoped tools over the same query/auth layer
 Terraform local provider ──▶ .local/dagster + .local/runtime + .local/data
 Docker Compose (optional) ─▶ local Dagster service runner
 observe_github.py ────────▶ row counts, freshness, last run, rate-limit status
@@ -67,12 +68,13 @@ Implemented now:
   - per-PR open-to-merge cycle time.
 - Local observability command for table existence, row counts, freshness, last run IDs, and GitHub rate-limit metadata.
 - Tenant-scoped REST export API over existing gold metrics.
+- Minimal MCP wrapper exposing the same existing gold metric contracts as three tools.
 - Local Terraform module and optional Docker Compose service runner.
 
 Not implemented yet:
 
 - Jira, CI/CD, incident, review/comment, or AI-tool integrations.
-- MCP wrapper or customer dashboard.
+- Customer dashboard or broader MCP/API surface beyond the three initial metric tools.
 - Near-real-time webhooks/queues/sensors.
 - Production auth, row-level security, encryption, alerting, cloud deployment, or tenant resource isolation.
 
@@ -90,6 +92,7 @@ Not implemented yet:
 | Dagster code location | `src/kabuto_kurage/definitions.py` |
 | REST export API | `src/kabuto_kurage/api/app.py` |
 | REST API auth | `src/kabuto_kurage/api/auth.py` |
+| MCP metric wrapper | `src/kabuto_kurage/mcp_server.py` |
 | Gold metric query layer | `src/kabuto_kurage/queries/github_metrics.py` |
 | Local observability | `src/kabuto_kurage/observability.py` |
 | Local IaC | `iac/local/` |
@@ -192,9 +195,9 @@ Open the URL printed by Dagster, select a tenant partition such as `sandbox`, an
 
 Asset materializations include row counts, tenant/source/layer metadata, Delta table paths and versions, freshness status, latest ingestion timestamps/run IDs, and GitHub rate-limit metadata where available.
 
-### 6. REST export API
+### 6. REST export API and MCP wrapper
 
-The export API exposes only existing GitHub gold metrics under `/api/v1`:
+The REST export API exposes only existing GitHub gold metrics under `/api/v1`:
 
 | Endpoint | Gold metric input |
 | --- | --- |
@@ -207,11 +210,20 @@ configuration stays outside git and maps token values to explicit tenant allowli
 Missing or invalid tokens return `401`; valid tokens requesting a tenant outside their
 allowlist return `403`; no endpoint defaults to all tenants.
 
-This API is a local portfolio analogue to public Jellyfish API/export evidence, not a
-Jellyfish-compatible API and not a claim that Jellyfish uses these endpoints, metrics,
-or implementation details internally.
+The MCP wrapper exposes only the matching initial metric tools:
 
-See `docs/export-api.md` for setup, curl examples, response examples, and validation.
+- `github_pr_throughput_daily`
+- `github_pr_cycle_time`
+- `github_metrics_summary`
+
+Each tool requires explicit `tenant_id` and `api_token` arguments and shares the REST
+API's token-to-tenant allowlist logic in `src/kabuto_kurage/api/auth.py`.
+
+These export surfaces are local portfolio analogues to public Jellyfish API/export and
+MCP evidence, not Jellyfish-compatible APIs and not a claim that Jellyfish uses these
+endpoints, tools, metrics, tenant model, or implementation details internally.
+
+See `docs/export-api.md` for setup, curl/tool examples, response examples, and validation.
 
 ## Multi-Tenancy Model
 

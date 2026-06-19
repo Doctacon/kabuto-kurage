@@ -1,4 +1,4 @@
-Status: blocked
+Status: done
 Created: 2026-06-18
 Updated: 2026-06-18
 Parent: .loom/tickets/2026-06-18-build-engineering-metrics-export-surface.md
@@ -39,18 +39,35 @@ Expected validation:
 
 ## Progress and Notes
 
-- Not started.
+- 2026-06-18: Expanded `docs/export-api.md` with setup, token config, endpoint-to-gold mapping, curl examples, response/error examples, tenant-scoped access rules, and public Jellyfish boundary.
+- 2026-06-18: Updated `README.md` and `docs/architecture.md` so the REST export API is represented as an implemented portfolio surface.
+- 2026-06-18: Added `tests/test_export_api_docs.py` and updated `tests/test_portfolio_docs.py` to keep export API documentation claims covered by deterministic tests.
+- 2026-06-18: Validated with `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`.
 
 ## Current State
 
-Blocked. This belongs to the export/API follow-up milestone, which is awaiting explicit operator/product selection, and it also depends on REST API implementation.
+Done. REST export API portfolio docs and validation evidence satisfy the ticket acceptance criteria.
 
 ## Journal
 
 - 2026-06-18: Created as a future child of the export/API follow-up plan.
 - 2026-06-18: Marked blocked pending export/API milestone selection and REST API implementation.
+- 2026-06-18: REST API implementation completed; moved to active and delegated docs/validation to worker.
+- 2026-06-18: Completed docs and validation pass. Evidence recorded in `.loom/evidence/2026-06-18-export-api-docs-validation.md`; review recorded in `.loom/reviews/2026-06-18-export-api-docs-review.md`.
+- 2026-06-18: Moved ticket to done.
+
+## Results
+
+Acceptance criteria satisfied:
+
+- README/docs include accurate endpoint examples and setup steps.
+- Documentation states that the API is inspired by public Jellyfish API/export evidence but is not API-compatible with Jellyfish.
+- Documentation maps each endpoint to existing gold metric tables.
+- Tenant-scoped access expectations and auth error behavior are explicit.
+- Validation evidence records commands and outputs.
+- Existing test/lint/typecheck suite passes.
+- No endpoints beyond the spec and no MCP code were added.
 
 ## Blockers
 
-- Requires REST API implementation.
-- Requires operator/product decision to begin the export/API follow-up milestone.
+None.

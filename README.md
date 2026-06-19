@@ -18,9 +18,10 @@ Silver Delta Lake
       ▼
 Gold Delta Lake
   └─ PR throughput and open-to-merge cycle-time metrics
-      ▼
-Dagster UI
-  └─ tenant partitions, asset lineage, materializations, freshness metadata
+      ├─▶ Dagster UI
+      │    └─ tenant partitions, asset lineage, materializations, freshness metadata
+      └─▶ REST export API
+           └─ tenant-scoped `/api/v1` JSON endpoints over gold metrics
 ```
 
 The project is inspired by public Jellyfish Staff Data Engineer role/product research, but it does **not** claim to reproduce Jellyfish's private architecture or proprietary metrics. See [Jellyfish relevance](#jellyfish-relevance-verified-facts-vs-assumptions).
@@ -33,6 +34,7 @@ The project is inspired by public Jellyfish Staff Data Engineer role/product res
 - **Orchestration:** Dagster exposes six tenant-partitioned assets and is the first user-facing surface.
 - **Metrics:** daily PR throughput and per-PR open-to-merge cycle time.
 - **Observability:** local freshness/row-count/rate-limit CLI plus Dagster materialization metadata.
+- **Export API:** FastAPI REST endpoints expose tenant-scoped gold metrics with bearer-token allowlists.
 - **IaC:** Terraform local provider prepares ignored runtime files; optional Docker Compose runs Dagster locally.
 - **Validation:** deterministic tests do not require live GitHub credentials.
 
@@ -57,8 +59,9 @@ Implemented now:
   - `github_gold_pr_cycle_time`
 - Local observability for row counts, last successful ingestion, freshness/lag, and GitHub rate-limit status.
 - Local Infrastructure as Code under `iac/local/`.
+- Tenant-scoped REST export API under `/api/v1` for GitHub gold metrics.
 
-Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, export REST API, MCP wrapper, dashboard, production auth/security, or cloud deployment.
+Not implemented yet: Jira/CI/CD/incident integrations, webhook queues/sensors, MCP wrapper, dashboard, production auth/security, or cloud deployment.
 
 ## Prerequisites
 
@@ -169,6 +172,44 @@ uv run python tools/build_github_gold.py --tenant sandbox --data-root /tmp/kabut
 uv run python tools/observe_github.py --tenant sandbox --data-root /tmp/kabuto-demo --format table
 ```
 
+## Run the tenant-scoped REST export API
+
+After gold metrics exist, start the local FastAPI export surface:
+
+```bash
+export KABUTO_API_TOKENS_JSON='{"local-sandbox-token":["sandbox"]}'
+uv run uvicorn kabuto_kurage.api.app:app --reload
+```
+
+Example calls:
+
+```bash
+curl -H "Authorization: Bearer local-sandbox-token" \
+  'http://127.0.0.1:8000/api/v1/tenants/sandbox/metrics/github/pr-throughput-daily?repository_full_name=octocat/Hello-World'
+
+curl -H "Authorization: Bearer local-sandbox-token" \
+  'http://127.0.0.1:8000/api/v1/tenants/sandbox/metrics/github/pr-cycle-time?merged=true&limit=10'
+
+curl -H "Authorization: Bearer local-sandbox-token" \
+  'http://127.0.0.1:8000/api/v1/tenants/sandbox/metrics/github/summary'
+```
+
+Endpoint-to-metric map:
+
+| Endpoint | Gold Delta metric input |
+| --- | --- |
+| `/api/v1/tenants/{tenant_id}/metrics/github/pr-throughput-daily` | `gold/github/pr_throughput_daily` |
+| `/api/v1/tenants/{tenant_id}/metrics/github/pr-cycle-time` | `gold/github/pr_cycle_time` |
+| `/api/v1/tenants/{tenant_id}/metrics/github/summary` | both `gold/github/pr_throughput_daily` and `gold/github/pr_cycle_time` |
+
+Every metric endpoint requires `Authorization: Bearer <token>`. Each token maps to
+an explicit tenant allowlist; missing/invalid tokens return `401`, and a valid token
+requesting a disallowed tenant returns `403`. The API is inspired by public Jellyfish
+API/export evidence but is not Jellyfish-compatible and does not claim Jellyfish
+internal architecture or metric definitions.
+
+See [`docs/export-api.md`](docs/export-api.md).
+
 ## Local Infrastructure as Code
 
 Terraform prepares local runtime files only; it does not provision cloud resources or secrets.
@@ -234,6 +275,7 @@ GitHub token values belong in your shell or ignored `.env`, never in tenant YAML
 | Gold GitHub metrics | [`docs/github-gold-metrics.md`](docs/github-gold-metrics.md) |
 | Dagster asset graph | [`docs/dagster-asset-graph.md`](docs/dagster-asset-graph.md) |
 | Observability/freshness | [`docs/observability.md`](docs/observability.md) |
+| REST export API | [`docs/export-api.md`](docs/export-api.md) |
 | Local IaC | [`docs/local-iac.md`](docs/local-iac.md) |
 
 ## Jellyfish relevance: verified facts vs assumptions

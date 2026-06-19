@@ -4,6 +4,7 @@ from pathlib import Path
 
 README = Path("README.md")
 ARCHITECTURE = Path("docs/architecture.md")
+EXPORT_API = Path("docs/export-api.md")
 
 
 def test_portfolio_readme_points_reviewer_to_core_story() -> None:
@@ -18,6 +19,7 @@ def test_portfolio_readme_points_reviewer_to_core_story() -> None:
         "Dagster UI",
         "Multi-tenancy",
         "Local Infrastructure as Code",
+        "REST export API",
         "Jellyfish relevance: verified facts vs assumptions",
     ]
     for phrase in required_phrases:
@@ -34,6 +36,7 @@ def test_architecture_doc_covers_required_portfolio_surfaces() -> None:
         "## Delta Lake Learning Notes",
         "## Observability",
         "## Local Infrastructure as Code",
+        "REST export API",
         "## Jellyfish Relevance: Verified Facts vs Project Assumptions",
         "## Validation Posture",
     ]
@@ -42,7 +45,13 @@ def test_architecture_doc_covers_required_portfolio_surfaces() -> None:
 
 
 def test_docs_distinguish_public_jellyfish_facts_from_unverified_internals() -> None:
-    docs = README.read_text(encoding="utf-8") + "\n" + ARCHITECTURE.read_text(encoding="utf-8")
+    docs = (
+        README.read_text(encoding="utf-8")
+        + "\n"
+        + ARCHITECTURE.read_text(encoding="utf-8")
+        + "\n"
+        + EXPORT_API.read_text(encoding="utf-8")
+    )
 
     assert "Verified public facts" in docs
     assert "Not verified" in docs
@@ -70,6 +79,7 @@ def test_readme_documentation_links_exist() -> None:
         "docs/github-gold-metrics.md",
         "docs/dagster-asset-graph.md",
         "docs/observability.md",
+        "docs/export-api.md",
         "docs/local-iac.md",
     ]
 

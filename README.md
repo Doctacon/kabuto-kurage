@@ -8,16 +8,17 @@ The target shape is a miniature Jellyfish-inspired platform: GitHub engineering 
 
 ## Current milestone
 
-The repository is currently at the **scaffold** milestone:
+The repository is currently at the **GitHub bronze ingestion** milestone:
 
 - Python 3.11+ project managed with `uv`.
 - Validated core stack: `deltalake`, `pyarrow`, `dagster`, `httpx`.
 - Source and test layout are in place.
 - Dagster has a stable code-location module, but real assets are intentionally deferred to later tickets.
 - Tenant/source configuration is represented in `config/tenants.example.yaml`.
+- GitHub repositories and pull requests can be ingested into tenant-scoped bronze Delta tables.
 - Secrets and generated local data are ignored by git.
 
-Real GitHub ingestion, Delta table writes, and Dagster asset graph work are tracked in Loom tickets under `.loom/tickets/`.
+Silver transforms, Dagster asset graph work, and metrics are tracked in Loom tickets under `.loom/tickets/`.
 
 ## Prerequisites
 
@@ -36,7 +37,7 @@ Optional local secrets/config setup:
 cp .env.example .env
 cp config/tenants.example.yaml config/tenants.local.yaml
 # Edit .env and config/tenants.local.yaml for local owner/repository choices.
-# Set GITHUB_TOKEN or GH_TOKEN when GitHub ingestion is implemented.
+# Set GITHUB_TOKEN or GH_TOKEN before running GitHub ingestion.
 ```
 
 ## Developer commands
@@ -75,6 +76,21 @@ uv run dagster dev -m kabuto_kurage.definitions
 
 The scaffold exposes an empty Dagster `Definitions` object so the command remains stable while downstream tickets add assets.
 
+Run GitHub bronze ingestion for one tenant:
+
+```bash
+uv run python tools/ingest_github_bronze.py --tenant sandbox
+```
+
+For a bounded validation run against a temporary data root:
+
+```bash
+uv run python tools/ingest_github_bronze.py \
+  --tenant sandbox \
+  --data-root /tmp/kabuto-kurage-validation \
+  --max-repositories 1
+```
+
 Run the stack validation proof from the previous milestone:
 
 ```bash
@@ -97,7 +113,7 @@ By default, generated data should live under `.local/data`. Override with `KABUT
 
 Tenant/source configuration is loaded from `KABUTO_TENANTS_CONFIG` when set, otherwise from `config/tenants.example.yaml`. Local overrides should live in ignored `config/tenants.local.yaml`.
 
-See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered.
+See `docs/tenancy.md` for the local tenancy model, storage path convention, and alternatives considered. See `docs/github-bronze-ingestion.md` for GitHub ingestion behavior, pagination/rate-limit notes, bronze columns, and failure semantics.
 
 ## Project memory
 

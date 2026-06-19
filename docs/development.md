@@ -19,6 +19,22 @@ uv run ruff check .
 uv run mypy src
 ```
 
+## GitHub bronze ingestion
+
+```bash
+export GITHUB_TOKEN=...
+uv run python tools/ingest_github_bronze.py --tenant sandbox
+```
+
+For a bounded validation run that does not write to the default local data root:
+
+```bash
+uv run python tools/ingest_github_bronze.py \
+  --tenant sandbox \
+  --data-root /tmp/kabuto-kurage-validation \
+  --max-repositories 1
+```
+
 ## Dagster
 
 ```bash

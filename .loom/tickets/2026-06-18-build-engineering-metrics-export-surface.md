@@ -1,6 +1,6 @@
-Status: active
+Status: done
 Created: 2026-06-18
-Updated: 2026-06-18
+Updated: 2026-06-19
 Parent: .loom/tickets/2026-06-18-build-mini-engineering-intelligence-platform.md
 Depends-On: .loom/specs/engineering-metrics-export-surface.md, .loom/tickets/2026-06-18-build-gold-engineering-metrics.md
 
@@ -55,7 +55,16 @@ The parent follow-up can close when:
 
 ## Current State
 
-Active. User approved proceeding with the export/API follow-up milestone on 2026-06-18.
+Done. The tenant-scoped engineering metrics export milestone is implemented and validated.
+
+Completed child tickets:
+
+- `.loom/tickets/2026-06-18-build-export-query-layer.md`
+- `.loom/tickets/2026-06-18-implement-tenant-scoped-rest-api.md`
+- `.loom/tickets/2026-06-18-document-and-validate-export-api.md`
+- `.loom/tickets/2026-06-18-add-minimal-mcp-wrapper.md`
+
+Final evidence: `.loom/evidence/2026-06-19-export-surface-final-validation.md`.
 
 ## Journal
 
@@ -63,13 +72,27 @@ Active. User approved proceeding with the export/API follow-up milestone on 2026
 - 2026-06-18: Marked blocked because implementing the export surface is a new milestone requiring explicit selection.
 - 2026-06-18: User approved proceeding with the follow-up milestone; parent moved to active and query-layer child started.
 - 2026-06-18: Query layer and tenant-scoped REST API children completed; documentation/validation child is the next dependency before MCP.
+- 2026-06-18: Export API documentation/validation child completed.
+- 2026-06-19: Minimal MCP wrapper child completed.
+- 2026-06-19: Final validation recorded in `.loom/evidence/2026-06-19-export-surface-final-validation.md`; parent moved to done.
 
 ## Progress and Notes
 
 - 2026-06-18: Created as follow-up parent plan from `.loom/tickets/2026-06-18-plan-export-api-followup.md`.
 - 2026-06-18: Completed `.loom/tickets/2026-06-18-build-export-query-layer.md`.
 - 2026-06-18: Completed `.loom/tickets/2026-06-18-implement-tenant-scoped-rest-api.md`.
+- 2026-06-18: Completed `.loom/tickets/2026-06-18-document-and-validate-export-api.md`.
+- 2026-06-19: Completed `.loom/tickets/2026-06-18-add-minimal-mcp-wrapper.md`.
+
+## Results
+
+Acceptance criteria satisfied:
+
+- REST endpoints from `.loom/specs/engineering-metrics-export-surface.md` return tenant-scoped JSON from existing gold Delta tables.
+- Tenant-scoped token auth has tests for missing, invalid, allowed, and disallowed tenant behavior.
+- API docs include examples and public-Jellyfish-inspiration disclaimers.
+- MCP wrapper is implemented against the same query/auth layer.
 
 ## Blockers
 
-None for the parent. Child tickets should proceed in dependency order.
+None.

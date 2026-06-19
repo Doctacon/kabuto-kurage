@@ -58,13 +58,13 @@ The actual token belongs in the local shell or ignored `.env` file:
 GITHUB_TOKEN=...
 ```
 
+If your GitHub token or object-store credentials live in Proton Pass, copy/export them into environment variables for the current shell session. Do not paste them into committed YAML, docs, screenshots, shell history examples, or Loom evidence. Prefer commands that set variables without echoing their values.
+
 The config loader rejects obvious GitHub token prefixes in `token_env` to catch accidental committed secrets early.
 
-## Local Storage Layout
+## Storage Profiles and Tenant Layout
 
-Tenant-scoped Delta paths are centralized in `kabuto_kurage.paths`.
-
-Conventional shape:
+Tenant-scoped Delta locations are centralized in `kabuto_kurage.paths`. The default profile is `local`, and it preserves the original filesystem shape:
 
 ```text
 .local/data/delta/tenants/{tenant_id}/{layer}/{source}/{table_name}
@@ -79,7 +79,33 @@ Examples:
 .local/data/delta/tenants/sandbox/bronze/github/pull_requests
 ```
 
-This path convention intentionally duplicates `tenant_id` in storage even though later records will also carry `tenant_id` as a column. That redundancy makes local inspection easier and creates a clear guardrail for future ingestion and transformation tickets.
+The active profile is selected with `KABUTO_STORAGE_PROFILE`:
+
+| Profile | Purpose | Delta root shape |
+| --- | --- | --- |
+| `local` | Default deterministic local/test storage. | `.local/data/delta` or `$KABUTO_DATA_ROOT/delta` |
+| `minio` | Open-source S3-compatible local object-store profile. | `s3://$KABUTO_MINIO_BUCKET/$KABUTO_STORAGE_PREFIX/delta` |
+| `r2` | Cloudflare R2 remote profile for Chris's personal runs. | `s3://$KABUTO_R2_BUCKET/$KABUTO_STORAGE_PREFIX/delta` for delta-rs, `r2://...` for DuckDB |
+
+Object-store profile variables are placeholders in `.env.example` only. Real values should come from Proton Pass or another secret manager into ignored env/local config:
+
+```bash
+export KABUTO_STORAGE_PROFILE=minio
+export KABUTO_MINIO_BUCKET=kabuto-dev
+export KABUTO_MINIO_ENDPOINT_URL=http://localhost:9000
+export KABUTO_MINIO_ACCESS_KEY_ID=...       # from Proton Pass/local secret store
+export KABUTO_MINIO_SECRET_ACCESS_KEY=...   # from Proton Pass/local secret store
+
+export KABUTO_STORAGE_PROFILE=r2
+export KABUTO_R2_BUCKET=your-r2-bucket
+export KABUTO_R2_ACCOUNT_ID=...             # from Proton Pass/local secret store
+export KABUTO_R2_ACCESS_KEY_ID=...          # from Proton Pass/local secret store
+export KABUTO_R2_SECRET_ACCESS_KEY=...      # from Proton Pass/local secret store
+```
+
+Do not run commands that print these values back to the terminal. `.env`, `.env.*`, `.local/`, `.dlt/`, `secrets/`, `config/tenants.local.yaml`, and `config/storage.local.yaml` are ignored by git.
+
+The storage convention intentionally duplicates `tenant_id` in the URI/path even though records also carry `tenant_id` as a column. That redundancy makes inspection easier and creates a clear guardrail for future ingestion and transformation tickets.
 
 ## Validation Guardrails
 

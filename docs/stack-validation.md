@@ -31,6 +31,28 @@ The script validates four things:
 3. GitHub API authentication works through dlt's REST client when `GITHUB_TOKEN` or `GH_TOKEN` is set; if no token is set, the script reports the setup gap without failing the local Delta/Dagster proofs.
 4. Dagster can materialize a toy asset that writes and reads the selected Delta storage approach.
 
+## Storage Profile Configuration
+
+Storage profile resolution is centralized in `src/kabuto_kurage/paths.py`.
+
+Key environment variables:
+
+| Variable | Profiles | Purpose |
+| --- | --- | --- |
+| `KABUTO_STORAGE_PROFILE` | all | `local`, `minio`, or `r2`; defaults to `local`. |
+| `KABUTO_DATA_ROOT` | local | Optional local runtime data root; defaults to `.local/data`. |
+| `KABUTO_STORAGE_PREFIX` | minio/r2 | Object-store prefix before `delta`; defaults to `kabuto-kurage`. |
+| `KABUTO_MINIO_BUCKET` | minio | MinIO bucket name. |
+| `KABUTO_MINIO_ENDPOINT_URL` | minio | Endpoint such as `http://localhost:9000`. |
+| `KABUTO_MINIO_ACCESS_KEY_ID` | minio | Access key copied from local secret storage/Proton Pass. |
+| `KABUTO_MINIO_SECRET_ACCESS_KEY` | minio | Secret key copied from local secret storage/Proton Pass. |
+| `KABUTO_R2_BUCKET` | r2 | Cloudflare R2 bucket name. |
+| `KABUTO_R2_ACCOUNT_ID` | r2 | Cloudflare account ID copied from Proton Pass. |
+| `KABUTO_R2_ACCESS_KEY_ID` | r2 | R2 S3-compatible access key copied from Proton Pass. |
+| `KABUTO_R2_SECRET_ACCESS_KEY` | r2 | R2 S3-compatible secret key copied from Proton Pass. |
+
+`delta_table_uri(...)` resolves table locations for all profiles. `delta_table_path(...)` is intentionally local-only and preserves the original filesystem behavior for existing deterministic tests.
+
 ## DuckDB Extension and Secret Requirements
 
 Local Delta query validation requires only DuckDB's Delta extension:

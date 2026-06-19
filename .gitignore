@@ -17,7 +17,9 @@ venv/
 .env.*
 !.env.example
 secrets/
+.dlt/
 config/tenants.local.yaml
+config/storage.local.yaml
 *.pem
 *.key
 
